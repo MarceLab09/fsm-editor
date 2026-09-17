@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="cache-control" content="no-cache">
+  <title>FSM Editor · maquina de estados → Verilog / Icestudio</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="css/style.css?v=4">
+</head>
+<body>
+
+  <header class="toolbar">
+    <span class="brand">FSM Editor</span>
+
+    <div class="group">
+      <button id="btn-new" title="Maquina nueva">Nuevo</button>
+      <button id="btn-demo" title="Cargar ejemplo (detector 101)">Ejemplo</button>
+    </div>
+    <span class="sep"></span>
+
+    <div class="group" title="Modo del raton">
+      <button id="mode-select">Seleccionar</button>
+      <button id="mode-state">+ Estado</button>
+      <button id="mode-transition">+ Transicion</button>
+    </div>
+    <span class="sep"></span>
+    <button id="btn-edit" title="Editar el elemento seleccionado (tambien: doble clic o Enter)" disabled>Editar…</button>
+    <button id="btn-fit" title="Ajustar la vista a la maquina">Ajustar vista</button>
+
+    <span class="spacer"></span>
+
+    <div class="group">
+      <button id="btn-save">Guardar .json</button>
+      <button id="btn-load">Abrir .json</button>
+      <input type="file" id="file-input" accept=".json,.fsm.json,application/json" hidden>
+    </div>
+    <span class="sep"></span>
+    <div class="group">
+      <button id="btn-export-v" class="primary" title="Modulo Verilog completo">Verilog .v</button>
+      <button id="btn-export-body" title="Solo el cuerpo (para bloque basic.code de Icestudio)">Cuerpo .v</button>
+      <button id="btn-export-ice" title="Bloque de Icestudio">.ice</button>
+    </div>
+  </header>
+
+  <main>
+    <section id="canvas-wrap">
+      <svg id="canvas" xmlns="http://www.w3.org/2000/svg"></svg>
+      <div id="hint">
+        doble clic (o selecciona y pulsa Enter / botón «Editar…») = abrir el menú ·
+        arrastrar estado = mover · Shift + arrastrar (o borde del estado) = conectar ·
+        arrastrar el punto azul de una transición = curvarla · Supr = borrar · rueda = zoom
+      </div>
+    </section>
+
+    <aside id="inspector">
+      <div class="tabs">
+        <div class="tab active" data-panel="panel-props">Propiedades</div>
+        <div class="tab" data-panel="panel-code">Salida</div>
+      </div>
+
+      <div id="panel-props" class="tab-panel active">
+
+        <div class="block">
+          <h3>Modulo</h3>
+          <label class="field"><span>Nombre del modulo</span><input id="mod-name" spellcheck="false"></label>
+          <div class="row" style="gap:8px">
+            <label class="field" style="flex:1;margin:0"><span>Reloj</span><input id="mod-clk" spellcheck="false"></label>
+            <label class="field" style="flex:1;margin:0"><span>Reset</span><input id="mod-rst" spellcheck="false"></label>
+          </div>
+          <label class="check"><input type="checkbox" id="mod-rst-low"> Reset activo en bajo</label>
+          <label class="check"><input type="checkbox" id="mod-rst-sync"> Reset sincrono (recomendado para iCE40)</label>
+          <label class="field"><span>Codificacion de estados</span>
+            <select id="mod-enc">
+              <option value="binary">Binaria</option>
+              <option value="gray">Gray</option>
+              <option value="onehot">One-hot</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="block">
+          <h3>Entradas</h3>
+          <div id="inputs-list"></div>
+          <button id="btn-add-input" class="wide">+ Anadir entrada</button>
+        </div>
+
+        <div class="block">
+          <h3>Salidas</h3>
+          <div id="outputs-list"></div>
+          <button id="btn-add-output" class="wide">+ Anadir salida</button>
+          <p class="muted" style="margin-top:6px">El tercer campo es el valor por defecto de la salida.</p>
+        </div>
+
+        <div class="block">
+          <h3>Seleccion</h3>
+          <div id="selection-panel"></div>
+        </div>
+
+        <div class="block">
+          <h3>Validacion <span id="problem-count" class="badge">—</span></h3>
+          <ul id="problems"></ul>
+        </div>
+
+      </div>
+
+      <div id="panel-code" class="tab-panel">
+        <div class="code-head">
+          <select id="code-view">
+            <option value="module">Verilog · modulo completo</option>
+            <option value="body">Verilog · solo cuerpo (Icestudio basic.code)</option>
+            <option value="ice">Icestudio · archivo .ice</option>
+          </select>
+          <button id="btn-copy">Copiar</button>
+        </div>
+        <pre id="code-out"></pre>
+      </div>
+    </aside>
+  </main>
+
+  <script src="js/model.js?v=4"></script>
+  <script src="js/verilog.js?v=4"></script>
+  <script src="js/icestudio.js?v=4"></script>
+  <script src="js/editor.js?v=4"></script>
+  <script src="js/app.js?v=4"></script>
+</body>
+</html>

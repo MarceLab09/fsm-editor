@@ -1,0 +1,15 @@
+{
+  "name": "fsm-editor",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Editor visual de maquinas de estados con exportacion a Verilog / Icestudio",
+  "scripts": {
+    "test:core": "node --test test/core.test.mjs",
+    "test:ui": "node --test test/ui.test.mjs",
+    "test": "node --test \"test/*.test.mjs\"",
+    "serve": "python -m http.server 8080"
+  },
+  "devDependencies": {
+    "playwright": "^1.47.0"
+  }
+}
