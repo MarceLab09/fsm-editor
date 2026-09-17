@@ -6,16 +6,32 @@
   <meta http-equiv="cache-control" content="no-cache">
   <title>FSM Editor · maquina de estados → Verilog / Icestudio</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="css/style.css?v=4">
+  <link rel="stylesheet" href="css/style.css?v=5">
 </head>
 <body>
 
   <header class="toolbar">
     <span class="brand">FSM Editor</span>
 
-    <div class="group">
-      <button id="btn-new" title="Maquina nueva">Nuevo</button>
-      <button id="btn-demo" title="Cargar ejemplo (detector 101)">Ejemplo</button>
+    <div class="menu" id="menu-file">
+      <button class="menu-trigger" id="menu-file-btn" aria-haspopup="true" aria-expanded="false">Archivo ▾</button>
+      <div class="menu-panel" id="menu-file-panel" hidden role="menu">
+        <button id="btn-new" role="menuitem" title="Maquina nueva">Nuevo</button>
+        <button id="btn-demo" role="menuitem" title="Cargar ejemplo (detector 101)">Cargar ejemplo</button>
+        <div class="menu-sep"></div>
+        <button id="btn-save" role="menuitem" title="Guardar el proyecto editable">Guardar máquina de estado (.fsm)</button>
+        <button id="btn-load" role="menuitem" title="Abrir un proyecto guardado">Abrir máquina de estado (.fsm)</button>
+        <input type="file" id="file-input" accept=".fsm,.fsm.json,.json,application/json" hidden>
+      </div>
+    </div>
+
+    <div class="menu" id="menu-export">
+      <button class="menu-trigger" id="menu-export-btn" aria-haspopup="true" aria-expanded="false">Exportar ▾</button>
+      <div class="menu-panel" id="menu-export-panel" hidden role="menu">
+        <button id="btn-export-v" role="menuitem" title="Modulo Verilog completo">Verilog (.v) · módulo completo</button>
+        <button id="btn-export-body" role="menuitem" title="Solo el cuerpo (para bloque basic.code de Icestudio)">Cuerpo .v (Icestudio)</button>
+        <button id="btn-export-ice" role="menuitem" title="Bloque de Icestudio">.ice (Icestudio)</button>
+      </div>
     </div>
     <span class="sep"></span>
 
@@ -29,18 +45,6 @@
     <button id="btn-fit" title="Ajustar la vista a la maquina">Ajustar vista</button>
 
     <span class="spacer"></span>
-
-    <div class="group">
-      <button id="btn-save">Guardar .json</button>
-      <button id="btn-load">Abrir .json</button>
-      <input type="file" id="file-input" accept=".json,.fsm.json,application/json" hidden>
-    </div>
-    <span class="sep"></span>
-    <div class="group">
-      <button id="btn-export-v" class="primary" title="Modulo Verilog completo">Verilog .v</button>
-      <button id="btn-export-body" title="Solo el cuerpo (para bloque basic.code de Icestudio)">Cuerpo .v</button>
-      <button id="btn-export-ice" title="Bloque de Icestudio">.ice</button>
-    </div>
   </header>
 
   <main>
@@ -118,10 +122,10 @@
     </aside>
   </main>
 
-  <script src="js/model.js?v=4"></script>
-  <script src="js/verilog.js?v=4"></script>
-  <script src="js/icestudio.js?v=4"></script>
-  <script src="js/editor.js?v=4"></script>
-  <script src="js/app.js?v=4"></script>
+  <script src="js/model.js?v=5"></script>
+  <script src="js/verilog.js?v=5"></script>
+  <script src="js/icestudio.js?v=5"></script>
+  <script src="js/editor.js?v=5"></script>
+  <script src="js/app.js?v=5"></script>
 </body>
 </html>

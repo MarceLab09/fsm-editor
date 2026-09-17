@@ -501,6 +501,37 @@
   }
 
   /* --------------------------------------------------------------------- */
+  /* Menus desplegables (Archivo / Exportar)                               */
+  /* --------------------------------------------------------------------- */
+  function bindMenus() {
+    var menus = Array.prototype.slice.call(document.querySelectorAll('.menu'));
+    function closeAll() {
+      menus.forEach(function (m) {
+        m.querySelector('.menu-panel').hidden = true;
+        m.querySelector('.menu-trigger').setAttribute('aria-expanded', 'false');
+      });
+    }
+    menus.forEach(function (m) {
+      var trigger = m.querySelector('.menu-trigger');
+      var panel = m.querySelector('.menu-panel');
+      trigger.addEventListener('click', function (evt) {
+        evt.stopPropagation();
+        var wasOpen = !panel.hidden;
+        closeAll();
+        if (!wasOpen) { panel.hidden = false; trigger.setAttribute('aria-expanded', 'true'); }
+      });
+      // un clic en cualquier accion del menu lo cierra (la accion ya se ejecuto
+      // en su propio listener, registrado en bindToolbar)
+      panel.addEventListener('click', function (evt) {
+        if (evt.target.tagName === 'BUTTON') closeAll();
+      });
+    });
+    document.addEventListener('click', closeAll);
+    document.addEventListener('keydown', function (evt) { if (evt.key === 'Escape') closeAll(); });
+    window.addEventListener('blur', closeAll);
+  }
+
+  /* --------------------------------------------------------------------- */
   /* Barra de herramientas                                                 */
   /* --------------------------------------------------------------------- */
   function bindToolbar() {
@@ -540,7 +571,7 @@
     });
 
     $('btn-save').addEventListener('click', function () {
-      download(safe(M().name) + '.fsm.json', FSM.serialize(M()), 'application/json');
+      download(safe(M().name) + '.fsm', FSM.serialize(M()), 'application/json');
     });
     $('btn-load').addEventListener('click', function () { $('file-input').click(); });
     $('file-input').addEventListener('change', function () {
@@ -603,6 +634,7 @@
 
     bindModulePanel();
     bindToolbar();
+    bindMenus();
 
     var restored = null;
     try {

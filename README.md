@@ -17,6 +17,16 @@ python -m http.server 8000
 
 y entra en `http://localhost:8000`.
 
+## Barra de herramientas
+
+Dos menús desplegables agrupan lo que no se usa a cada clic:
+
+- **Archivo ▾** — Nuevo, Cargar ejemplo, Guardar / Abrir máquina de estado (`.fsm`).
+- **Exportar ▾** — Verilog `.v` (módulo completo), Cuerpo `.v` (Icestudio `basic.code`), `.ice`.
+
+El resto (modo del ratón, **Editar…**, **Ajustar vista**) son botones sueltos,
+porque se usan todo el rato.
+
 ## Controles del lienzo
 
 | Acción | Cómo |
@@ -62,8 +72,9 @@ estado, sus flechas lo siguen y mantienen la curvatura.
   condiciones con señales no declaradas, transiciones incondicionales mal
   colocadas, etc. Cada aviso es clicable y selecciona el elemento implicado.
 
-El proyecto se guarda/carga como `.fsm.json` y además hay autoguardado en
-`localStorage`.
+El proyecto se guarda/carga como **`.fsm`** (menú **Archivo**) y además hay
+autoguardado en `localStorage`. La exportación a Verilog/Icestudio vive en el
+menú **Exportar**.
 
 ## Exportación a Verilog
 

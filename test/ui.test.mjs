@@ -123,6 +123,94 @@ test('boton "Editar…" y tecla Enter abren el dialogo del elemento seleccionado
   await page.close();
 });
 
+test('transiciones reciprocas curvan a lados opuestos (no se cruzan), incluso tras mover un estado', async () => {
+  const { page, errors } = await openEditor();
+  // demo: S10<->S101 es un par reciproco (transiciones #5 y #7, indices 4 y 6)
+  const sideCheck = async () => page.evaluate(() => {
+    const edges = document.querySelectorAll('#canvas .layer-edges .edge .line');
+    const nodes = document.querySelectorAll('#canvas .layer-nodes .state');
+    const pt = (el, frac) => { const L = el.getTotalLength(); return el.getPointAtLength(L * frac); };
+    // el centro del estado es la traslacion del <g>, no el bbox local del
+    // circulo (ese esta centrado en 0,0 dentro de su propio <g>)
+    const center = (g) => {
+      const m = g.getAttribute('transform').match(/translate\(([-\d.]+)[ ,]+([-\d.]+)\)/);
+      return { x: parseFloat(m[1]), y: parseFloat(m[2]) };
+    };
+    const s10 = center(nodes[2]), s101 = center(nodes[3]);
+    const apex1 = pt(edges[4], 0.5), apex2 = pt(edges[6], 0.5);
+    const L = { x: s101.x - s10.x, y: s101.y - s10.y };
+    const cross = (p) => L.x * (p.y - s10.y) - L.y * (p.x - s10.x);
+    return { c1: cross(apex1), c2: cross(apex2) };
+  });
+
+  const before = await sideCheck();
+  assert.ok(before.c1 * before.c2 < 0, 'deberian curvar a lados opuestos: ' + JSON.stringify(before));
+  assert.ok(Math.abs(before.c1) > 5 && Math.abs(before.c2) > 5, 'deberian estar realmente curvadas, no rectas');
+
+  // mueve S101 (como en el ejemplo del usuario) y repite la comprobacion
+  const s101Body = page.locator('#canvas .layer-nodes .state').nth(3).locator('.body');
+  const { x, y } = await centerOf(s101Body);
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x - 150, y + 90, { steps: 10 });
+  await page.mouse.up();
+
+  const after = await sideCheck();
+  assert.ok(after.c1 * after.c2 < 0, 'tras mover el estado deberian seguir en lados opuestos: ' + JSON.stringify(after));
+  assert.ok(Math.abs(after.c1) > 5 && Math.abs(after.c2) > 5);
+  assert.deepEqual(errors, []);
+  await page.close();
+});
+
+test('menus "Archivo" y "Exportar": ocultos por defecto, se abren/cierran y ejecutan su accion', async () => {
+  const { page, errors } = await openEditor();
+
+  assert.equal(await page.locator('#menu-file-panel').isHidden(), true);
+  assert.equal(await page.locator('#menu-export-panel').isHidden(), true);
+
+  // abrir y cerrar con clic fuera
+  await page.click('#menu-file-btn');
+  assert.equal(await page.locator('#menu-file-panel').isHidden(), false);
+  await page.click('#canvas', { position: { x: 5, y: 5 } });
+  assert.equal(await page.locator('#menu-file-panel').isHidden(), true);
+
+  // abrir "Archivo" y cargar el ejemplo -> carga Y cierra el menu
+  await page.click('#menu-file-btn');
+  await page.click('#btn-demo');
+  await page.waitForFunction(() => document.querySelectorAll('#canvas .layer-nodes .state').length === 4);
+  assert.equal(await page.locator('#menu-file-panel').isHidden(), true, 'el menu deberia cerrarse tras elegir una accion');
+
+  // Escape tambien cierra
+  await page.click('#menu-export-btn');
+  assert.equal(await page.locator('#menu-export-panel').isHidden(), false);
+  await page.keyboard.press('Escape');
+  assert.equal(await page.locator('#menu-export-panel').isHidden(), true);
+
+  assert.deepEqual(errors, []);
+  await page.close();
+});
+
+test('exportar/guardar desde los menus descargan con el nombre y extension correctos', async () => {
+  const { page } = await openEditor();
+
+  await page.click('#menu-export-btn');
+  const [dl1] = await Promise.all([page.waitForEvent('download'), page.click('#btn-export-v')]);
+  assert.match(dl1.suggestedFilename(), /^detector_101\.v$/);
+
+  await page.click('#menu-export-btn');
+  const [dl2] = await Promise.all([page.waitForEvent('download'), page.click('#btn-export-ice')]);
+  assert.match(dl2.suggestedFilename(), /^detector_101\.ice$/);
+
+  // Guardar -> extension propia .fsm (no .fsm.json)
+  await page.click('#menu-file-btn');
+  const [dl3] = await Promise.all([page.waitForEvent('download'), page.click('#btn-save')]);
+  assert.match(dl3.suggestedFilename(), /^detector_101\.fsm$/);
+
+  // Abrir sigue aceptando .fsm (y de paso .json por compatibilidad)
+  assert.match(await page.locator('#file-input').getAttribute('accept'), /\.fsm\b/);
+  await page.close();
+});
+
 test('doble clic en el fondo crea un estado y abre su dialogo', async () => {
   const { page, errors } = await openEditor();
   const before = await nodeCount(page);

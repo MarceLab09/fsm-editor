@@ -45,6 +45,18 @@
   function len(x, y) { return Math.sqrt(x * x + y * y); }
   function norm(x, y) { var l = len(x, y) || 1; return { x: x / l, y: y / l }; }
 
+  /* Perpendicular a la recta A-B, pero fija para el PAR de estados (no para
+     "hacia donde apunta" esta transicion en concreto). Si se calculara con
+     B-A directamente, una transicion A->B y su reciproca B->A obtendrian
+     perpendiculares opuestas, que al combinarse con el signo opuesto de
+     `curve` que les da el modelo se CANCELAN -> las dos acaban curvando al
+     mismo lado y las lineas se cruzan. Al fijar el lado por el par de ids
+     (no por from/to) el signo de `curve` sí controla el lado, siempre. */
+  function canonPerp(t, A, B) {
+    var flip = t.from < t.to ? 1 : -1;
+    return norm(-(B.y - A.y) * flip, (B.x - A.x) * flip);
+  }
+
   function stateRadius(s) {
     if (s && s.radius != null && !isNaN(s.radius) && s.radius > 0) {
       return Math.max(16, Math.min(160, Number(s.radius)));
@@ -196,9 +208,8 @@
       };
     }
 
-    var dx = B.x - A.x, dy = B.y - A.y;
     var mid = { x: (A.x + B.x) / 2, y: (A.y + B.y) / 2 };
-    var perp = norm(-dy, dx);
+    var perp = canonPerp(t, A, B);
     var curve = t.curve || 0;
     var ctrl = { x: mid.x + perp.x * curve, y: mid.y + perp.y * curve };
     var dirA = norm(ctrl.x - A.x, ctrl.y - A.y);
@@ -413,7 +424,7 @@
         var A = FSM.getState(machine(), tc.from), B = FSM.getState(machine(), tc.to);
         if (!tc || !A || !B) return;
         var mx = (A.x + B.x) / 2, my = (A.y + B.y) / 2;
-        var pp = norm(-(B.y - A.y), B.x - A.x);
+        var pp = canonPerp(tc, A, B);
         // el tirador esta en el apice (comba/2): la comba es el doble del desvio
         tc.curve = Math.round(((wp.x - mx) * pp.x + (wp.y - my) * pp.y) * 2);
         d.moved = true;
