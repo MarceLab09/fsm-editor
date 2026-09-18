@@ -123,29 +123,40 @@ test('boton "Editar…" y tecla Enter abren el dialogo del elemento seleccionado
   await page.close();
 });
 
-test('transiciones reciprocas curvan a lados opuestos (no se cruzan), incluso tras mover un estado', async () => {
+test('transiciones reciprocas no se cruzan entre si, incluso tras mover un estado', async () => {
   const { page, errors } = await openEditor();
   // demo: S10<->S101 es un par reciproco (transiciones #5 y #7, indices 4 y 6)
-  const sideCheck = async () => page.evaluate(() => {
+  const check = async () => page.evaluate(() => {
+    function ccw(a, b, c) { return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x); }
+    function segCross(p1, p2, p3, p4) {
+      const d1 = ccw(p3, p4, p1), d2 = ccw(p3, p4, p2), d3 = ccw(p1, p2, p3), d4 = ccw(p1, p2, p4);
+      return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
+    }
     const edges = document.querySelectorAll('#canvas .layer-edges .edge .line');
-    const nodes = document.querySelectorAll('#canvas .layer-nodes .state');
-    const pt = (el, frac) => { const L = el.getTotalLength(); return el.getPointAtLength(L * frac); };
-    // el centro del estado es la traslacion del <g>, no el bbox local del
-    // circulo (ese esta centrado en 0,0 dentro de su propio <g>)
-    const center = (g) => {
-      const m = g.getAttribute('transform').match(/translate\(([-\d.]+)[ ,]+([-\d.]+)\)/);
-      return { x: parseFloat(m[1]), y: parseFloat(m[2]) };
-    };
-    const s10 = center(nodes[2]), s101 = center(nodes[3]);
-    const apex1 = pt(edges[4], 0.5), apex2 = pt(edges[6], 0.5);
-    const L = { x: s101.x - s10.x, y: s101.y - s10.y };
-    const cross = (p) => L.x * (p.y - s10.y) - L.y * (p.x - s10.x);
-    return { c1: cross(apex1), c2: cross(apex2) };
+    function sample(el, n, lo, hi) {
+      const L = el.getTotalLength(), out = [];
+      for (let i = 0; i <= n; i += 1) out.push(el.getPointAtLength(L * (lo + (hi - lo) * i / n)));
+      return out;
+    }
+    // recorta cerca de los extremos: ahi las dos curvas convergen al mismo
+    // punto de S10/S101 sin que eso sea un "cruce"
+    const A = sample(edges[4], 16, 0.15, 0.85), B = sample(edges[6], 16, 0.15, 0.85);
+    let crossed = false;
+    for (let i = 0; i < A.length - 1 && !crossed; i += 1) {
+      for (let j = 0; j < B.length - 1 && !crossed; j += 1) {
+        if (segCross(A[i], A[i + 1], B[j], B[j + 1])) crossed = true;
+      }
+    }
+    // "de verdad curvadas": el punto medio de cada arco se aleja de la recta
+    const mid = (pts) => pts[Math.floor(pts.length / 2)];
+    const m1 = mid(A), m2 = mid(B);
+    const bend = Math.hypot(m1.x - m2.x, m1.y - m2.y);
+    return { crossed, bend };
   });
 
-  const before = await sideCheck();
-  assert.ok(before.c1 * before.c2 < 0, 'deberian curvar a lados opuestos: ' + JSON.stringify(before));
-  assert.ok(Math.abs(before.c1) > 5 && Math.abs(before.c2) > 5, 'deberian estar realmente curvadas, no rectas');
+  const before = await check();
+  assert.equal(before.crossed, false, 'no deberian cruzarse: ' + JSON.stringify(before));
+  assert.ok(before.bend > 10, 'deberian estar realmente curvadas, no rectas');
 
   // mueve S101 (como en el ejemplo del usuario) y repite la comprobacion
   const s101Body = page.locator('#canvas .layer-nodes .state').nth(3).locator('.body');
@@ -155,9 +166,9 @@ test('transiciones reciprocas curvan a lados opuestos (no se cruzan), incluso tr
   await page.mouse.move(x - 150, y + 90, { steps: 10 });
   await page.mouse.up();
 
-  const after = await sideCheck();
-  assert.ok(after.c1 * after.c2 < 0, 'tras mover el estado deberian seguir en lados opuestos: ' + JSON.stringify(after));
-  assert.ok(Math.abs(after.c1) > 5 && Math.abs(after.c2) > 5);
+  const after = await check();
+  assert.equal(after.crossed, false, 'tras mover el estado tampoco deberian cruzarse: ' + JSON.stringify(after));
+  assert.ok(after.bend > 10);
   assert.deepEqual(errors, []);
   await page.close();
 });
@@ -208,6 +219,101 @@ test('exportar/guardar desde los menus descargan con el nombre y extension corre
 
   // Abrir sigue aceptando .fsm (y de paso .json por compatibilidad)
   assert.match(await page.locator('#file-input').getAttribute('accept'), /\.fsm\b/);
+  await page.close();
+});
+
+test('mover un estado cerca de otro no cruza transiciones de pares distintos que comparten destino', async () => {
+  // Reproduce el reporte: arrastrar S101 junto a S0. S0->S1 y S101->S1 son
+  // PARES DISTINTOS (no reciprocos) que comparten destino (S1); antes del
+  // fix, el lado de cada curva se decidia por el id interno (arbitrario) y
+  // podian salir cruzadas en forma de "X".
+  const { page, errors } = await openEditor();
+  const s0 = await centerOf(page.locator('#canvas .layer-nodes .state').nth(0).locator('.body'));
+  const s101 = page.locator('#canvas .layer-nodes .state').nth(3).locator('.body');
+  const { x, y } = await centerOf(s101);
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(s0.x + 15, s0.y + 90, { steps: 12 });  // justo debajo de S0
+  await page.mouse.up();
+
+  const crossed = await page.evaluate(() => {
+    function sample(el, n) {
+      const L = el.getTotalLength();
+      const out = [];
+      for (let i = 0; i <= n; i += 1) out.push(el.getPointAtLength(L * (0.12 + 0.7 * i / n))); // recorta ambos extremos
+      return out;
+    }
+    function ccw(a, b, c) { return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x); }
+    function segmentsCross(p1, p2, p3, p4) {
+      const d1 = ccw(p3, p4, p1), d2 = ccw(p3, p4, p2), d3 = ccw(p1, p2, p3), d4 = ccw(p1, p2, p4);
+      return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
+    }
+    const lines = document.querySelectorAll('#canvas .layer-edges .edge .line');
+    const A = sample(lines[0], 20);   // S0 -> S1
+    const B = sample(lines[7], 20);   // S101 -> S1
+    for (let i = 0; i < A.length - 1; i += 1) {
+      for (let j = 0; j < B.length - 1; j += 1) {
+        if (segmentsCross(A[i], A[i + 1], B[j], B[j + 1])) return true;
+      }
+    }
+    return false;
+  });
+  assert.equal(crossed, false, 'S0->S1 y S101->S1 no deberian cruzarse tras acercar S101 a S0');
+  assert.deepEqual(errors, []);
+  await page.close();
+});
+
+test('repulsion general: dos transiciones sin ningun estado en comun no se cruzan', async () => {
+  // Caso general (no "mismo par", no "comparten estado"): P->Q y R->S, con
+  // los 4 estados en posiciones fijas (cargadas por archivo, sin pasar por
+  // clics/rejilla/zoom, para que el caso sea exacto y reproducible) tales
+  // que en linea recta se cruzarian. A diferencia de dos DIAGONALES
+  // exactamente opuestas de un cuadrado (que se cruzan siempre, sin remedio
+  // salvo rodear por fuera), esta disposicion SI es separable combando cada
+  // una hacia su lado.
+  const { page, errors } = await openEditor();
+  const model = {
+    version: 1, name: 'fsm', clock: 'clk', reset: 'rst', resetActiveLow: false, resetSync: false,
+    encoding: 'binary', inputs: [], outputs: [],
+    states: [
+      { id: 'P', name: 'P', x: 0, y: 0, outputs: {}, code: null, radius: null, dcUndefined: false, comment: '' },
+      { id: 'Q', name: 'Q', x: 100, y: 120, outputs: {}, code: null, radius: null, dcUndefined: false, comment: '' },
+      { id: 'R', name: 'R', x: 20, y: 110, outputs: {}, code: null, radius: null, dcUndefined: false, comment: '' },
+      { id: 'S', name: 'S', x: 120, y: 0, outputs: {}, code: null, radius: null, dcUndefined: false, comment: '' }
+    ],
+    transitions: [
+      { id: 't1', from: 'P', to: 'Q', cond: '', outputs: {}, curve: 45, loopAngle: -90, dcUndefined: false, comment: '' },
+      { id: 't2', from: 'R', to: 'S', cond: '', outputs: {}, curve: 45, loopAngle: -90, dcUndefined: false, comment: '' }
+    ],
+    initial: 'P'
+  };
+  await page.locator('#file-input').setInputFiles({
+    name: 'q-case.fsm', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(model))
+  });
+  await page.waitForFunction(() => document.querySelectorAll('#canvas .layer-edges .edge').length === 2);
+
+  const crossed = await page.evaluate(() => {
+    function ccw(a, b, c) { return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x); }
+    function segCross(p1, p2, p3, p4) {
+      const d1 = ccw(p3, p4, p1), d2 = ccw(p3, p4, p2), d3 = ccw(p1, p2, p3), d4 = ccw(p1, p2, p4);
+      return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
+    }
+    const lines = document.querySelectorAll('#canvas .layer-edges .edge .line');
+    function sample(el, n) {
+      const L = el.getTotalLength(), out = [];
+      for (let i = 0; i <= n; i += 1) out.push(el.getPointAtLength(L * i / n));
+      return out;
+    }
+    const A = sample(lines[0], 24), B = sample(lines[1], 24);
+    for (let i = 0; i < A.length - 1; i += 1) {
+      for (let j = 0; j < B.length - 1; j += 1) {
+        if (segCross(A[i], A[i + 1], B[j], B[j + 1])) return true;
+      }
+    }
+    return false;
+  });
+  assert.equal(crossed, false, 'las dos diagonales deberian separarse en vez de cruzarse');
+  assert.deepEqual(errors, []);
   await page.close();
 });
 

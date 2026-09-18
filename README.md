@@ -53,6 +53,15 @@ Las transiciones se dibujan **siempre como arco** (nunca rectas); las recíproca
 (A→B y B→A) y las paralelas se abren en abanico a lados opuestos. Al mover un
 estado, sus flechas lo siguen y mantienen la curvatura.
 
+Además, en cada cambio se recalcula una **repulsión general**: cualquier par de
+transiciones cuyos trazos se cruzan se separa automáticamente (aunque no
+compartan ningún estado), sin tocar lo que ya curvaste a mano. Excepción
+honesta: si dos transiciones son las dos **diagonales de un cuadrilátero
+convexo** (4 estados en posiciones tales que cada línea conecta las esquinas
+opuestas), se cruzan sí o sí — ninguna curva razonable lo evita sin rodear por
+fuera del dibujo; en ese caso concreto se deja el cruce en vez de deformar la
+curva sin límite.
+
 ## Modelo
 
 - **Entradas / salidas** con ancho de bus configurable.

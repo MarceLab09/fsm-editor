@@ -45,16 +45,22 @@
   function len(x, y) { return Math.sqrt(x * x + y * y); }
   function norm(x, y) { var l = len(x, y) || 1; return { x: x / l, y: y / l }; }
 
-  /* Perpendicular a la recta A-B, pero fija para el PAR de estados (no para
-     "hacia donde apunta" esta transicion en concreto). Si se calculara con
-     B-A directamente, una transicion A->B y su reciproca B->A obtendrian
-     perpendiculares opuestas, que al combinarse con el signo opuesto de
-     `curve` que les da el modelo se CANCELAN -> las dos acaban curvando al
-     mismo lado y las lineas se cruzan. Al fijar el lado por el par de ids
-     (no por from/to) el signo de `curve` sí controla el lado, siempre. */
+  /* Perpendicular a la recta A-B, pero con un criterio FIJO e independiente
+     de "hacia donde apunta" esta transicion:
+       1) No depende de from/to: una transicion A->B y su reciproca B->A usan
+          el mismo par (P,Q) ordenado por posicion -> el signo opuesto de
+          `curve` que les da el modelo sí las manda a lados opuestos, siempre
+          (si no, se cancela con el giro de direccion y acaban al mismo lado).
+       2) El orden se decide por POSICION (no por id interno, que es
+          arbitrario y no tiene relacion con la geometria). Asi, dos
+          transiciones de PARES distintos que van en una direccion parecida
+          (p.ej. S0->S1 y S101->S1, con S0 y S101 cerca entre si) obtienen
+          perpendiculares que apuntan hacia el mismo lado -> curvan para el
+          mismo lado en vez de cruzarse en forma de "X". */
   function canonPerp(t, A, B) {
-    var flip = t.from < t.to ? 1 : -1;
-    return norm(-(B.y - A.y) * flip, (B.x - A.x) * flip);
+    var P = A, Q = B;
+    if (B.x < A.x || (B.x === A.x && B.y < A.y)) { P = B; Q = A; }
+    return norm(-(Q.y - P.y), Q.x - P.x);
   }
 
   function stateRadius(s) {
@@ -134,8 +140,154 @@
     clear(state.layerEdges);
     clear(state.layerNodes);
 
+    state.curveExtra = computeCurveRepulsion(m);
     m.transitions.forEach(function (t) { drawEdge(m, t); });
     m.states.forEach(function (s) { drawNode(m, s); });
+  }
+
+  /* --------------------------------------------------------------------- */
+  /* "Repulsion" de curvas: separa CUALQUIER par de transiciones cuyos      */
+  /* trazos se cruzan, sin tocar lo que el usuario ya curvo a mano.         */
+  /* --------------------------------------------------------------------- */
+
+  /* Punto sobre la cuadratica A -> ctrl -> B, en u de 0 a 1 (aproximacion:
+     usa los CENTROS de los estados como extremos, no los puntos recortados
+     por el radio -- de sobra para detectar cruces, no para dibujar). */
+  function quadPoint(A, ctrl, B, u) {
+    var v = 1 - u;
+    return {
+      x: v * v * A.x + 2 * v * u * ctrl.x + u * u * B.x,
+      y: v * v * A.y + 2 * v * u * ctrl.y + u * u * B.y
+    };
+  }
+  function sampleQuad(A, ctrl, B, n) {
+    var pts = [];
+    for (var i = 0; i <= n; i += 1) pts.push(quadPoint(A, ctrl, B, i / n));
+    return pts;
+  }
+  /* Si un extremo de la curva coincide con un estado que la OTRA curva
+     tambien toca, recorta ese extremo antes de comparar -- si no, dos
+     flechas que simplemente comparten un estado siempre "se tocarian" ahi
+     y se detectarian como cruce aunque no lo sean. */
+  function trimShared(pts, trimStart, trimEnd) {
+    var lo = trimStart ? Math.ceil(pts.length * 0.22) : 0;
+    var hi = trimEnd ? Math.floor(pts.length * 0.78) : pts.length - 1;
+    return hi > lo ? pts.slice(lo, hi + 1) : [];
+  }
+  function ccw(a, b, c) { return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x); }
+  function segmentsCross(p1, p2, p3, p4) {
+    var d1 = ccw(p3, p4, p1), d2 = ccw(p3, p4, p2), d3 = ccw(p1, p2, p3), d4 = ccw(p1, p2, p4);
+    return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
+  }
+  function polylinesCross(a, b) {
+    for (var i = 0; i < a.length - 1; i += 1) {
+      for (var j = 0; j < b.length - 1; j += 1) {
+        if (segmentsCross(a[i], a[i + 1], b[j], b[j + 1])) return true;
+      }
+    }
+    return false;
+  }
+
+  var REPEL_STEP = 18, REPEL_MAX = 220, REPEL_ITERS = 8, REPEL_LIMIT_EDGES = 60, REPEL_GIVE_UP = 6;
+
+  function computeCurveRepulsion(m) {
+    var real = m.transitions.filter(function (t) {
+      return t.from !== t.to && FSM.getState(m, t.from) && FSM.getState(m, t.to);
+    });
+    // Las transiciones que comparten pareja de estados (reciprocas A<->B, o
+    // varias A->B en abanico) quedan FUERA de este sistema por completo: el
+    // modelo ya las separa bien entre si (signos opuestos sobre el mismo
+    // canonPerp) y esa garantia es mas importante que la general -- si se
+    // permite que este mecanismo las toque, un empujon por otra transicion
+    // no relacionada puede desalinearlas entre ellas mismas.
+    var pairCount = {};
+    real.forEach(function (t) {
+      var key = t.from < t.to ? t.from + '|' + t.to : t.to + '|' + t.from;
+      pairCount[key] = (pairCount[key] || 0) + 1;
+    });
+    var edges = real.filter(function (t) {
+      var key = t.from < t.to ? t.from + '|' + t.to : t.to + '|' + t.from;
+      return pairCount[key] === 1;
+    });
+    var extra = {};
+    edges.forEach(function (t) { extra[t.id] = 0; });
+    if (edges.length < 2 || edges.length > REPEL_LIMIT_EDGES) return extra;
+    // Algunos pares NO se pueden separar curvando (p.ej. las dos diagonales
+    // de un cuadrilatero convexo: se cruzan siempre, salvo rodear por fuera).
+    // Sin este tope, "seguir creciendo" en esos casos no los resuelve nunca y
+    // encima la curva gigante resultante empieza a chocar con OTRAS
+    // transiciones que antes estaban bien -- un cruce se convertia en varios.
+    var giveUp = {};
+
+    function ctrlWith(t, extraVal) {
+      var A = FSM.getState(m, t.from), B = FSM.getState(m, t.to);
+      var perp = canonPerp(t, A, B);
+      var curve = (t.curve || 0) + extraVal;
+      var mid = { x: (A.x + B.x) / 2, y: (A.y + B.y) / 2 };
+      return { A: A, B: B, ctrl: { x: mid.x + perp.x * curve, y: mid.y + perp.y * curve } };
+    }
+    function crossesWith(ti, exI, tj, exJ) {
+      var gi = ctrlWith(ti, exI), gj = ctrlWith(tj, exJ);
+      var pi = trimShared(sampleQuad(gi.A, gi.ctrl, gi.B, 12),
+        ti.from === tj.from || ti.from === tj.to, ti.to === tj.from || ti.to === tj.to);
+      var pj = trimShared(sampleQuad(gj.A, gj.ctrl, gj.B, 12),
+        tj.from === ti.from || tj.from === ti.to, tj.to === ti.from || tj.to === ti.to);
+      if (pi.length < 2 || pj.length < 2) return false;
+      return polylinesCross(pi, pj);
+    }
+
+    for (var iter = 0; iter < REPEL_ITERS; iter += 1) {
+      var changed = false;
+      for (var i = 0; i < edges.length; i += 1) {
+        for (var j = i + 1; j < edges.length; j += 1) {
+          var ti = edges[i], tj = edges[j];
+          // Nota: no se excluyen las que comparten el mismo par de estados
+          // (A->B con B->A, o varias A->B en abanico): el modelo ya las deja
+          // sin cruzarse de entrada (signos opuestos sobre el mismo
+          // canonPerp), asi que aqui simplemente no se detecta cruce y se
+          // dejan como estan -- salvo que un empujon de OTRA pareja las
+          // desalinee, en cuyo caso conviene corregirlas igual que a cualquier
+          // otro par.
+          if (!crossesWith(ti, extra[ti.id], tj, extra[tj.id])) continue;
+          var pairKey = ti.id < tj.id ? ti.id + '|' + tj.id : tj.id + '|' + ti.id;
+          if ((giveUp[pairKey] || 0) >= REPEL_GIVE_UP) continue;   // ya se probo suficiente, no insistir
+
+          // Para cada arista probamos 2 movimientos candidatos: crecer un
+          // poco mas hacia su lado actual ("grow"), o saltar de un golpe
+          // al lado contrario ("flip", refleja el total actual). Crecer
+          // solo no basta cuando el lado que hace falta es el opuesto al
+          // que ya tiene -- ahi ni 8 pasos de 18px llegan a tiempo; el
+          // salto lo resuelve en pocas iteraciones. Se prueban las 4
+          // combinaciones (grow/flip x grow/flip) y se aplica la primera
+          // que de verdad separe a ESTE par; si ninguna lo hace todavia,
+          // se sigue creciendo (mas iteraciones le dan otra oportunidad).
+          var curI = (ti.curve || 0) + extra[ti.id], curJ = (tj.curve || 0) + extra[tj.id];
+          var growI = extra[ti.id] + (curI >= 0 ? 1 : -1) * REPEL_STEP;
+          var flipI = -2 * (ti.curve || 0) - extra[ti.id];
+          var growJ = extra[tj.id] + (curJ >= 0 ? 1 : -1) * REPEL_STEP;
+          var flipJ = -2 * (tj.curve || 0) - extra[tj.id];
+          var combos = [[growI, growJ], [growI, flipJ], [flipI, growJ], [flipI, flipJ]];
+          var applied = false;
+          for (var c = 0; c < combos.length; c += 1) {
+            var nExI = Math.max(-REPEL_MAX, Math.min(REPEL_MAX, combos[c][0]));
+            var nExJ = Math.max(-REPEL_MAX, Math.min(REPEL_MAX, combos[c][1]));
+            if (!crossesWith(ti, nExI, tj, nExJ)) {
+              extra[ti.id] = nExI; extra[tj.id] = nExJ;
+              applied = true;
+              break;
+            }
+          }
+          if (!applied) {
+            giveUp[pairKey] = (giveUp[pairKey] || 0) + 1;
+            extra[ti.id] = Math.max(-REPEL_MAX, Math.min(REPEL_MAX, growI));
+            extra[tj.id] = Math.max(-REPEL_MAX, Math.min(REPEL_MAX, growJ));
+          }
+          changed = true;
+        }
+      }
+      if (!changed) break;
+    }
+    return extra;
   }
 
   function outputsLabel(map) {
@@ -210,7 +362,11 @@
 
     var mid = { x: (A.x + B.x) / 2, y: (A.y + B.y) / 2 };
     var perp = canonPerp(t, A, B);
-    var curve = t.curve || 0;
+    // `curve` es lo que el usuario puso (o el valor por defecto); `curveExtra`
+    // es un empujon SOLO visual, recalculado en cada render, que separa esta
+    // transicion de cualquier otra con la que se cruce -- no se guarda en el
+    // modelo, asi que arrastrar el tirador sigue partiendo del valor real.
+    var curve = (t.curve || 0) + ((state.curveExtra && state.curveExtra[t.id]) || 0);
     var ctrl = { x: mid.x + perp.x * curve, y: mid.y + perp.y * curve };
     var dirA = norm(ctrl.x - A.x, ctrl.y - A.y);
     var dirB = norm(ctrl.x - B.x, ctrl.y - B.y);
@@ -345,19 +501,22 @@
 
       // Deteccion manual de doble clic sobre estado/transicion: el render() que
       // dispara la seleccion sustituye los nodos del DOM, asi que el evento
-      // nativo `dblclick` no llega. Con dos pointerdown sobre el mismo id en
-      // menos de 450 ms abrimos el dialogo.
+      // nativo `dblclick` no llega. Con dos CLICS (sin arrastre de por medio)
+      // sobre el mismo id en menos de 450 ms, abrimos el dialogo.
       var hitId = nodeEl ? nodeEl.getAttribute('data-id') : (edgeEl ? edgeEl.getAttribute('data-id') : null);
-      if (hitId) {
-        var nowT = Date.now();
-        if (state._lastClick && state._lastClick.id === hitId && (nowT - state._lastClick.t) < 450) {
-          state._lastClick = null;
-          state.onEdit({ kind: nodeEl ? 'state' : 'transition', id: hitId });
-          return;
-        }
-        state._lastClick = { id: hitId, t: nowT };
-      } else {
+      if (hitId && state._lastClick && state._lastClick.id === hitId && (Date.now() - state._lastClick.t) < 450) {
         state._lastClick = null;
+        state.onEdit({ kind: nodeEl ? 'state' : 'transition', id: hitId });
+        return;
+      }
+      if (!nodeEl) {
+        // clic en una transicion (sin ambiguedad de arrastre) o en el fondo:
+        // se arma (o se cancela) aqui mismo. Para un ESTADO se decide en
+        // endDrag() -- solo si termina siendo un clic limpio, no si lo mueve
+        // o si arrastra una conexion nueva desde el (si no, mover un estado y
+        // enseguida arrastrar otra conexion desde el se confundia con un
+        // doble clic y abria el dialogo en vez de conectar).
+        state._lastClick = edgeEl ? { id: hitId, t: Date.now() } : null;
       }
 
       if (nodeEl) {
@@ -451,6 +610,11 @@
       try { state.svg.releasePointerCapture(evt.pointerId); } catch (e) {}
       if (!d) return;
       if ((d.type === 'move' || d.type === 'curve' || d.type === 'loop') && d.moved) commit();
+      if (d.type === 'move') {
+        // clic limpio (sin arrastre real) sobre un estado: arma el posible
+        // doble clic para la proxima vez que se pulse sobre el mismo estado
+        state._lastClick = d.moved ? null : { id: d.id, t: Date.now() };
+      }
       if (d.type === 'link') {
         clear(state.layerTemp);
         highlightHover(null);
