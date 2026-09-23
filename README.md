@@ -37,8 +37,8 @@ porque se usan todo el rato.
 | Mover estado | arrastrarlo (con la rejilla; `Alt` = libre) |
 | Nueva transición | **Shift + arrastrar** de un estado a otro, **o arrastrar desde el borde** del estado, o botón **+ Transición**. Al soltar se abre el diálogo de la transición |
 | Auto-transición | arrastrar (con Shift o desde el borde) de un estado a sí mismo |
-| Editar transición | **doble clic en la flecha** → diálogo: condición, salidas (Mealy), prioridad, curvatura, «valores no definidos → DC» |
-| Curvar una transición | seleccionarla y **arrastrar el punto azul** de su vértice (el ángulo, en las auto-transiciones) |
+| Editar transición | **doble clic en la flecha** → diálogo: condición, salidas (Mealy), prioridad, curvatura / ángulo del bucle (vacío = automático), «valores no definidos → DC» |
+| Curvar una transición | **arrastrar la propia línea** (queda fijada a mano; en el panel, «Volver a curvatura automática») |
 | Seleccionar | clic |
 | Borrar | tecla **Supr / Backspace** |
 | Zoom | rueda del ratón |
@@ -49,18 +49,52 @@ Atajos de modo: `V` seleccionar · `S` añadir estado · `T` añadir transición
 
 Los diálogos también están replicados en el panel lateral **Propiedades** (edición rápida sin modal).
 
-Las transiciones se dibujan **siempre como arco** (nunca rectas); las recíprocas
-(A→B y B→A) y las paralelas se abren en abanico a lados opuestos. Al mover un
-estado, sus flechas lo siguen y mantienen la curvatura.
+### Transiciones: curvas «a lo Digital»
 
-Además, en cada cambio se recalcula una **repulsión general**: cualquier par de
-transiciones cuyos trazos se cruzan se separa automáticamente (aunque no
-compartan ningún estado), sin tocar lo que ya curvaste a mano. Excepción
-honesta: si dos transiciones son las dos **diagonales de un cuadrilátero
-convexo** (4 estados en posiciones tales que cada línea conecta las esquinas
-opuestas), se cruzan sí o sí — ninguna curva razonable lo evita sin rodear por
-fuera del dibujo; en ese caso concreto se deja el cruce en vez de deformar la
-curva sin límite.
+El comportamiento está tomado del editor de máquinas de estado de
+[Digital](https://github.com/hneemann/Digital/tree/master/src/main/java/de/neemann/digital/fsm)
+(paquete `de.neemann.digital.fsm`):
+
+- **Cada transición es un solo arco de circunferencia** (matemáticamente
+  redondo, sin picos) que pasa por un **punto guía**. El punto guía solo se
+  mueve por la mediatriz entre los dos estados, así que la curva se abre hacia
+  un lado u otro; la etiqueta (condición) va en ese punto. Las flechas salen y
+  llegan al borde de cada estado, en dirección al punto guía.
+- **Física animada**: el punto guía es atraído al centro entre sus estados y
+  **repelido** por los demás estados y por los puntos guía de las otras
+  transiciones. Se integra con masa y rozamiento hasta asentarse, por eso las
+  curvas se abren **hacia afuera** y se separan entre sí al mover estados,
+  con animación.
+- **Arrastrar la línea, o el punto azul que aparece sobre ella al
+  seleccionarla,** mueve su punto guía y la **fija a mano** (la física ya no
+  la toca). En el panel *Seleccion* o en el diálogo (campo vacío) vuelve a
+  **automática**.
+- Las auto-transiciones son un bucle cuyo ángulo automático apunta lejos de los
+  estados vecinos y del triangulito de inicio.
+
+Diferencias deliberadas con Digital (`js/physics.js`):
+
+1. Digital no garantiza que las líneas no se crucen (lo arregla el usuario a
+   mano). Aquí, cuando la física se asienta y quedan cruces, un buscador local
+   fija otros valores de curvatura (otro lado o más abierta) para las
+   transiciones implicadas y las curvas se acercan suavemente a ellos.
+2. La atracción tiene una longitud natural (~22 px) para que una línea sola
+   entre dos estados no quede recta.
+3. Exige holgura entre curvas y estados y que la etiqueta no quede tapada.
+
+**Fiabilidad medida** (80 disposiciones aleatorias de los 4 estados del ejemplo,
+misma topología de transiciones): el **90 %** salen sin ningún cruce, ninguna
+queda recta y ninguna atraviesa un estado; se asienta en bien menos de medio
+segundo (una sola vez, al soltar el arrastre — no en cada fotograma).
+
+Límite honesto: con una sola curva por transición hay disposiciones donde un
+cruce es **inevitable** — y el ejemplo (*detector 101*) es justo una de ellas:
+tiene 8 transiciones sobre 4 estados, incluida una pareja recíproca
+(S10↔S101), y **da igual dónde se coloquen los 4 estados** (lo comprobé con 10
+disposiciones distintas): siempre queda exactamente 1 cruce, por la misma
+razón por la que un cuadrilátero convexo no puede dibujar sus dos diagonales
+sin cruzarlas sin rodear por fuera. Ahí el buscador prefiere ese único cruce
+antes que atravesar un estado o forzar una búsqueda mucho más lenta.
 
 ## Modelo
 
@@ -128,6 +162,7 @@ css/style.css
 js/model.js        modelo de datos + validación (global FSM)
 js/verilog.js      generador Verilog-2001 (global VERILOG)
 js/icestudio.js    generador de archivo .ice (global ICE)
+js/physics.js      curvas a lo Digital: arco, física de los puntos guía, deshacer cruces (global PHYS)
 js/editor.js       lienzo SVG: dibujar, mover, pan/zoom, seleccionar (global EDITOR)
 js/app.js          barra de herramientas, inspector, exportación
 test/              pruebas (core en Node + UI con Playwright)

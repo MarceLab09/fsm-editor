@@ -9,7 +9,6 @@
   var SVG_NS = 'http://www.w3.org/2000/svg';
   var ARROW = 10;
   var GRID = 20;
-  var DEFAULT_CURVE = 45;
 
   var state = {
     svg: null,
@@ -23,7 +22,10 @@
     view: { tx: 60, ty: 40, k: 1 },
     mode: 'select',                 // select | addState | addTransition
     selection: null,                // {kind:'state'|'transition', id}
-    drag: null                      // estado interno del arrastre en curso
+    drag: null,                     // estado interno del arrastre en curso
+    phys: { v: {} },                // velocidades de la fisica de las curvas
+    hold: null,                     // valores fijados por untangle (o null)
+    sig: '', untangled: false, physFrame: 0, physFrames: 0, loopAng: null
   };
 
   /* --------------------------------------------------------------------- */
@@ -44,24 +46,6 @@
   }
   function len(x, y) { return Math.sqrt(x * x + y * y); }
   function norm(x, y) { var l = len(x, y) || 1; return { x: x / l, y: y / l }; }
-
-  /* Perpendicular a la recta A-B, pero con un criterio FIJO e independiente
-     de "hacia donde apunta" esta transicion:
-       1) No depende de from/to: una transicion A->B y su reciproca B->A usan
-          el mismo par (P,Q) ordenado por posicion -> el signo opuesto de
-          `curve` que les da el modelo sí las manda a lados opuestos, siempre
-          (si no, se cancela con el giro de direccion y acaban al mismo lado).
-       2) El orden se decide por POSICION (no por id interno, que es
-          arbitrario y no tiene relacion con la geometria). Asi, dos
-          transiciones de PARES distintos que van en una direccion parecida
-          (p.ej. S0->S1 y S101->S1, con S0 y S101 cerca entre si) obtienen
-          perpendiculares que apuntan hacia el mismo lado -> curvan para el
-          mismo lado en vez de cruzarse en forma de "X". */
-  function canonPerp(t, A, B) {
-    var P = A, Q = B;
-    if (B.x < A.x || (B.x === A.x && B.y < A.y)) { P = B; Q = A; }
-    return norm(-(Q.y - P.y), Q.x - P.x);
-  }
 
   function stateRadius(s) {
     if (s && s.radius != null && !isNaN(s.radius) && s.radius > 0) {
@@ -134,160 +118,96 @@
   /* --------------------------------------------------------------------- */
   function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
 
+  /* --------------------------------------------------------------------- */
+  /* Fisica de las curvas (physics.js): animada, como el editor de Digital  */
+  /* --------------------------------------------------------------------- */
+  function physInput(m) {
+    return {
+      states: m.states.map(function (s) { return { id: s.id, x: s.x, y: s.y, r: stateRadius(s) }; }),
+      trans: m.transitions.map(function (t) {
+        return { id: t.id, from: t.from, to: t.to, curve: t.curve || 0, auto: t.auto !== false, loopAngle: t.loopAngle };
+      }),
+      initial: m.initial
+    };
+  }
+
+  /* Firma de lo que obliga a recalcular: estados, conexiones y lo fijado a mano.
+     Las curvas AUTOMATICAS no cuentan (las mueve la propia fisica). */
+  function layoutSignature(m) {
+    var parts = [];
+    m.states.forEach(function (s) { parts.push(s.id + ':' + s.x + ',' + s.y + ',' + stateRadius(s)); });
+    m.transitions.forEach(function (t) {
+      parts.push(t.id + ':' + t.from + '>' + t.to + (t.auto === false ? '!' + (t.curve || 0) + ',' + (t.loopAngle == null ? '' : t.loopAngle) : ''));
+    });
+    parts.push(m.initial || '');
+    return parts.join('|');
+  }
+
+  var PHYS_STEPS = 100, PHYS_MAX_FRAMES = 300;
+
+  function wakePhysics() {
+    if (state.physFrame) return;
+    state.physFrames = 0;
+    var raf = global.requestAnimationFrame || function (f) { return setTimeout(f, 16); };
+    state.physFrame = raf(tickPhysics);
+  }
+
+  function tickPhysics() {
+    state.physFrame = 0;
+    var m = machine();
+    if (!m || !m.transitions.length) return;
+    var input = physInput(m);
+    input.hold = state.hold;
+    var res = PHYS.step(input, state.phys, PHYS_STEPS);
+    m.transitions.forEach(function (t) {
+      if (res.curves[t.id] != null) t.curve = res.curves[t.id];
+    });
+    state.loopAng = res.loops;
+    drawEdges(m);
+    state.onChange({ transient: true });
+
+    state.physFrames += 1;
+    var again = !res.settled && state.physFrames < PHYS_MAX_FRAMES;
+    if (res.settled && !state.hold && !state.untangled) {
+      // asentada la fisica: si quedan cruces, se fijan los valores que los evitan
+      // y las curvas se acercan a ellos (sin saltos)
+      state.untangled = true;
+      var inp2 = physInput(m);
+      var u = PHYS.untangle({ states: inp2.states, trans: inp2.trans }, res.curves);
+      if (u.changed) { state.hold = u.values; again = true; }
+    }
+    if (again) {
+      var raf = global.requestAnimationFrame || function (f) { return setTimeout(f, 16); };
+      state.physFrame = raf(tickPhysics);
+    }
+  }
+
   function render() {
     var m = machine();
     if (!m) return;
+    var sig = layoutSignature(m);
+    if (sig !== state.sig) {                   // algo cambio: se recalcula todo
+      state.sig = sig;
+      state.hold = null;
+      state.untangled = false;
+      state.phys = { v: {} };
+      wakePhysics();
+    }
+    draw(m);
+  }
+
+  /* Solo las lineas: es lo unico que mueve la fisica, y asi los estados no se
+     recrean en cada fotograma (siguen siendo el mismo elemento bajo el raton). */
+  function drawEdges(m) {
     clear(state.layerEdges);
-    clear(state.layerNodes);
-
-    state.curveExtra = computeCurveRepulsion(m);
+    if (!state.loopAng) state.loopAng = PHYS.loopAngles(physInput(m));
     m.transitions.forEach(function (t) { drawEdge(m, t); });
+  }
+
+  function draw(m) {
+    drawEdges(m);
+    clear(state.layerNodes);
     m.states.forEach(function (s) { drawNode(m, s); });
-  }
-
-  /* --------------------------------------------------------------------- */
-  /* "Repulsion" de curvas: separa CUALQUIER par de transiciones cuyos      */
-  /* trazos se cruzan, sin tocar lo que el usuario ya curvo a mano.         */
-  /* --------------------------------------------------------------------- */
-
-  /* Punto sobre la cuadratica A -> ctrl -> B, en u de 0 a 1 (aproximacion:
-     usa los CENTROS de los estados como extremos, no los puntos recortados
-     por el radio -- de sobra para detectar cruces, no para dibujar). */
-  function quadPoint(A, ctrl, B, u) {
-    var v = 1 - u;
-    return {
-      x: v * v * A.x + 2 * v * u * ctrl.x + u * u * B.x,
-      y: v * v * A.y + 2 * v * u * ctrl.y + u * u * B.y
-    };
-  }
-  function sampleQuad(A, ctrl, B, n) {
-    var pts = [];
-    for (var i = 0; i <= n; i += 1) pts.push(quadPoint(A, ctrl, B, i / n));
-    return pts;
-  }
-  /* Si un extremo de la curva coincide con un estado que la OTRA curva
-     tambien toca, recorta ese extremo antes de comparar -- si no, dos
-     flechas que simplemente comparten un estado siempre "se tocarian" ahi
-     y se detectarian como cruce aunque no lo sean. */
-  function trimShared(pts, trimStart, trimEnd) {
-    var lo = trimStart ? Math.ceil(pts.length * 0.22) : 0;
-    var hi = trimEnd ? Math.floor(pts.length * 0.78) : pts.length - 1;
-    return hi > lo ? pts.slice(lo, hi + 1) : [];
-  }
-  function ccw(a, b, c) { return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x); }
-  function segmentsCross(p1, p2, p3, p4) {
-    var d1 = ccw(p3, p4, p1), d2 = ccw(p3, p4, p2), d3 = ccw(p1, p2, p3), d4 = ccw(p1, p2, p4);
-    return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
-  }
-  function polylinesCross(a, b) {
-    for (var i = 0; i < a.length - 1; i += 1) {
-      for (var j = 0; j < b.length - 1; j += 1) {
-        if (segmentsCross(a[i], a[i + 1], b[j], b[j + 1])) return true;
-      }
-    }
-    return false;
-  }
-
-  var REPEL_STEP = 18, REPEL_MAX = 220, REPEL_ITERS = 8, REPEL_LIMIT_EDGES = 60, REPEL_GIVE_UP = 6;
-
-  function computeCurveRepulsion(m) {
-    var real = m.transitions.filter(function (t) {
-      return t.from !== t.to && FSM.getState(m, t.from) && FSM.getState(m, t.to);
-    });
-    // Las transiciones que comparten pareja de estados (reciprocas A<->B, o
-    // varias A->B en abanico) quedan FUERA de este sistema por completo: el
-    // modelo ya las separa bien entre si (signos opuestos sobre el mismo
-    // canonPerp) y esa garantia es mas importante que la general -- si se
-    // permite que este mecanismo las toque, un empujon por otra transicion
-    // no relacionada puede desalinearlas entre ellas mismas.
-    var pairCount = {};
-    real.forEach(function (t) {
-      var key = t.from < t.to ? t.from + '|' + t.to : t.to + '|' + t.from;
-      pairCount[key] = (pairCount[key] || 0) + 1;
-    });
-    var edges = real.filter(function (t) {
-      var key = t.from < t.to ? t.from + '|' + t.to : t.to + '|' + t.from;
-      return pairCount[key] === 1;
-    });
-    var extra = {};
-    edges.forEach(function (t) { extra[t.id] = 0; });
-    if (edges.length < 2 || edges.length > REPEL_LIMIT_EDGES) return extra;
-    // Algunos pares NO se pueden separar curvando (p.ej. las dos diagonales
-    // de un cuadrilatero convexo: se cruzan siempre, salvo rodear por fuera).
-    // Sin este tope, "seguir creciendo" en esos casos no los resuelve nunca y
-    // encima la curva gigante resultante empieza a chocar con OTRAS
-    // transiciones que antes estaban bien -- un cruce se convertia en varios.
-    var giveUp = {};
-
-    function ctrlWith(t, extraVal) {
-      var A = FSM.getState(m, t.from), B = FSM.getState(m, t.to);
-      var perp = canonPerp(t, A, B);
-      var curve = (t.curve || 0) + extraVal;
-      var mid = { x: (A.x + B.x) / 2, y: (A.y + B.y) / 2 };
-      return { A: A, B: B, ctrl: { x: mid.x + perp.x * curve, y: mid.y + perp.y * curve } };
-    }
-    function crossesWith(ti, exI, tj, exJ) {
-      var gi = ctrlWith(ti, exI), gj = ctrlWith(tj, exJ);
-      var pi = trimShared(sampleQuad(gi.A, gi.ctrl, gi.B, 12),
-        ti.from === tj.from || ti.from === tj.to, ti.to === tj.from || ti.to === tj.to);
-      var pj = trimShared(sampleQuad(gj.A, gj.ctrl, gj.B, 12),
-        tj.from === ti.from || tj.from === ti.to, tj.to === ti.from || tj.to === ti.to);
-      if (pi.length < 2 || pj.length < 2) return false;
-      return polylinesCross(pi, pj);
-    }
-
-    for (var iter = 0; iter < REPEL_ITERS; iter += 1) {
-      var changed = false;
-      for (var i = 0; i < edges.length; i += 1) {
-        for (var j = i + 1; j < edges.length; j += 1) {
-          var ti = edges[i], tj = edges[j];
-          // Nota: no se excluyen las que comparten el mismo par de estados
-          // (A->B con B->A, o varias A->B en abanico): el modelo ya las deja
-          // sin cruzarse de entrada (signos opuestos sobre el mismo
-          // canonPerp), asi que aqui simplemente no se detecta cruce y se
-          // dejan como estan -- salvo que un empujon de OTRA pareja las
-          // desalinee, en cuyo caso conviene corregirlas igual que a cualquier
-          // otro par.
-          if (!crossesWith(ti, extra[ti.id], tj, extra[tj.id])) continue;
-          var pairKey = ti.id < tj.id ? ti.id + '|' + tj.id : tj.id + '|' + ti.id;
-          if ((giveUp[pairKey] || 0) >= REPEL_GIVE_UP) continue;   // ya se probo suficiente, no insistir
-
-          // Para cada arista probamos 2 movimientos candidatos: crecer un
-          // poco mas hacia su lado actual ("grow"), o saltar de un golpe
-          // al lado contrario ("flip", refleja el total actual). Crecer
-          // solo no basta cuando el lado que hace falta es el opuesto al
-          // que ya tiene -- ahi ni 8 pasos de 18px llegan a tiempo; el
-          // salto lo resuelve en pocas iteraciones. Se prueban las 4
-          // combinaciones (grow/flip x grow/flip) y se aplica la primera
-          // que de verdad separe a ESTE par; si ninguna lo hace todavia,
-          // se sigue creciendo (mas iteraciones le dan otra oportunidad).
-          var curI = (ti.curve || 0) + extra[ti.id], curJ = (tj.curve || 0) + extra[tj.id];
-          var growI = extra[ti.id] + (curI >= 0 ? 1 : -1) * REPEL_STEP;
-          var flipI = -2 * (ti.curve || 0) - extra[ti.id];
-          var growJ = extra[tj.id] + (curJ >= 0 ? 1 : -1) * REPEL_STEP;
-          var flipJ = -2 * (tj.curve || 0) - extra[tj.id];
-          var combos = [[growI, growJ], [growI, flipJ], [flipI, growJ], [flipI, flipJ]];
-          var applied = false;
-          for (var c = 0; c < combos.length; c += 1) {
-            var nExI = Math.max(-REPEL_MAX, Math.min(REPEL_MAX, combos[c][0]));
-            var nExJ = Math.max(-REPEL_MAX, Math.min(REPEL_MAX, combos[c][1]));
-            if (!crossesWith(ti, nExI, tj, nExJ)) {
-              extra[ti.id] = nExI; extra[tj.id] = nExJ;
-              applied = true;
-              break;
-            }
-          }
-          if (!applied) {
-            giveUp[pairKey] = (giveUp[pairKey] || 0) + 1;
-            extra[ti.id] = Math.max(-REPEL_MAX, Math.min(REPEL_MAX, growI));
-            extra[tj.id] = Math.max(-REPEL_MAX, Math.min(REPEL_MAX, growJ));
-          }
-          changed = true;
-        }
-      }
-      if (!changed) break;
-    }
-    return extra;
   }
 
   function outputsLabel(map) {
@@ -333,8 +253,10 @@
     return outs ? (base + ' / ' + outs) : base;
   }
 
-  /* Geometria de una transicion: trazado, punta, angulo de la punta, posicion
-     de la etiqueta y del tirador de curvatura. Todo en coordenadas de mundo. */
+  /* Geometria de una transicion, todo en coordenadas de mundo:
+     - entre dos estados: UNA cuadratica que pasa por el punto guia (Digital);
+       el punto guia se guarda como `curve` (desplazamiento perpendicular).
+     - auto-transicion: bucle cubico en la direccion `loopAng`. */
   function edgeGeom(m, t) {
     var A = FSM.getState(m, t.from);
     var B = FSM.getState(m, t.to);
@@ -342,7 +264,8 @@
     var rA = stateRadius(A), rB = stateRadius(B);
 
     if (t.from === t.to) {
-      var ang = (t.loopAngle == null ? -90 : t.loopAngle) * Math.PI / 180;
+      var deg = state.loopAng && state.loopAng[t.id] != null ? state.loopAng[t.id] : (t.loopAngle == null ? -90 : t.loopAngle);
+      var ang = deg * Math.PI / 180;
       var spread = 0.5;
       var sa = ang - spread, ea = ang + spread;
       var s0 = { x: A.x + rA * Math.cos(sa), y: A.y + rA * Math.sin(sa) };
@@ -356,36 +279,27 @@
         tip: e0,
         tipAngle: Math.atan2(e0.y - c2.y, e0.x - c2.x),
         labelPos: { x: A.x + (rA + cd) * 0.60 * Math.cos(ang), y: A.y + (rA + cd) * 0.60 * Math.sin(ang) },
-        handle: { x: A.x + (rA + cd) * 0.74 * Math.cos(ang), y: A.y + (rA + cd) * 0.74 * Math.sin(ang) }
+        handle: { x: A.x + (rA + cd) * 0.5 * Math.cos(ang), y: A.y + (rA + cd) * 0.5 * Math.sin(ang) }
       };
     }
 
-    var mid = { x: (A.x + B.x) / 2, y: (A.y + B.y) / 2 };
-    var perp = canonPerp(t, A, B);
-    // `curve` es lo que el usuario puso (o el valor por defecto); `curveExtra`
-    // es un empujon SOLO visual, recalculado en cada render, que separa esta
-    // transicion de cualquier otra con la que se cruce -- no se guarda en el
-    // modelo, asi que arrastrar el tirador sigue partiendo del valor real.
-    var curve = (t.curve || 0) + ((state.curveExtra && state.curveExtra[t.id]) || 0);
-    var ctrl = { x: mid.x + perp.x * curve, y: mid.y + perp.y * curve };
-    var dirA = norm(ctrl.x - A.x, ctrl.y - A.y);
-    var dirB = norm(ctrl.x - B.x, ctrl.y - B.y);
-    var start = { x: A.x + dirA.x * rA, y: A.y + dirA.y * rA };
-    var tip = { x: B.x + dirB.x * rB, y: B.y + dirB.y * rB };
-    var endCtl = { x: B.x + dirB.x * (rB + ARROW), y: B.y + dirB.y * (rB + ARROW) };
-    var apex = {
-      x: 0.25 * start.x + 0.5 * ctrl.x + 0.25 * endCtl.x,
-      y: 0.25 * start.y + 0.5 * ctrl.y + 0.25 * endCtl.y
-    };
-    // etiqueta desplazada hacia fuera del arco para no solaparse con el tirador
-    var side = curve >= 0 ? 1 : -1;
+    var arc = PHYS.arc({ x: A.x, y: A.y, r: rA }, { x: B.x, y: B.y, r: rB }, t.curve || 0);
+    if (!arc) return null;                                   // dos estados en el mismo punto
+    var cut = PHYS.arcTrimmed(arc, ARROW - 1);          // misma curva, terminada antes de la punta
+    var d = cut.circle
+      ? 'M ' + arc.start.x + ' ' + arc.start.y + ' A ' + cut.circle.r + ' ' + cut.circle.r +
+        ' 0 ' + cut.largeArc + ' ' + cut.sweep + ' ' + cut.end.x + ' ' + cut.end.y
+      : 'M ' + arc.start.x + ' ' + arc.start.y + ' L ' + cut.end.x + ' ' + cut.end.y;
+    // como en Digital: si la curva queda por debajo (o por encima) de sus dos
+    // estados, la etiqueta se aparta un poco hacia fuera
+    var shift = (A.y < arc.pos.y && B.y < arc.pos.y) ? 8 : ((A.y > arc.pos.y && B.y > arc.pos.y) ? -8 : 0);
     return {
-      loop: false, A: A, B: B, mid: mid, perp: perp,
-      d: 'M ' + start.x + ' ' + start.y + ' Q ' + ctrl.x + ' ' + ctrl.y + ' ' + endCtl.x + ' ' + endCtl.y,
-      tip: tip,
-      tipAngle: Math.atan2(tip.y - ctrl.y, tip.x - ctrl.x),
-      labelPos: { x: apex.x + perp.x * 16 * side, y: apex.y + perp.y * 16 * side },
-      handle: apex
+      loop: false, A: A, B: B,
+      d: d,
+      tip: arc.end,
+      tipAngle: Math.atan2(cut.tangent.y, cut.tangent.x),
+      labelPos: { x: arc.pos.x, y: arc.pos.y + shift },
+      handle: arc.pos    // punto guia: aqui va el tirador azul cuando esta seleccionada
     };
   }
 
@@ -412,10 +326,10 @@
         ' L ' + (ax + ARROW * Math.cos(a2)) + ' ' + (ay + ARROW * Math.sin(a2)) + ' Z'
     }));
 
-    if (selected) {
+    if (selected && G.handle) {
       g.appendChild(el('circle', {
         class: 'curve-handle', r: 6, cx: G.handle.x, cy: G.handle.y,
-        title: G.loop ? 'arrastra para girar el bucle' : 'arrastra para curvar'
+        title: G.loop ? 'arrastra para girar el bucle' : 'arrastra para curvar a mano'
       }));
     }
 
@@ -489,16 +403,6 @@
       var edgeEl = edgeElFromEvent(evt);
       var wp = worldPoint(evt);
 
-      // tirador de curvatura de una transicion seleccionada
-      if (evt.target.classList && evt.target.classList.contains('curve-handle') && edgeEl) {
-        var ct = FSM.getTransition(m, edgeEl.getAttribute('data-id'));
-        if (ct) {
-          state.drag = { type: ct.from === ct.to ? 'loop' : 'curve', id: ct.id };
-          svg.setPointerCapture(evt.pointerId);
-        }
-        return;
-      }
-
       // Deteccion manual de doble clic sobre estado/transicion: el render() que
       // dispara la seleccion sustituye los nodos del DOM, asi que el evento
       // nativo `dblclick` no llega. Con dos CLICS (sin arrastre de por medio)
@@ -539,7 +443,12 @@
       }
 
       if (edgeEl) {
-        setSelection({ kind: 'transition', id: edgeEl.getAttribute('data-id') });
+        var eid = edgeEl.getAttribute('data-id');
+        setSelection({ kind: 'transition', id: eid });
+        // arrastrar la propia linea mueve su punto guia (curvatura), como en Digital;
+        // solo cuenta como arrastre si el raton se mueve unos pixeles
+        state.drag = { type: 'curve', id: eid, moved: false, sx: evt.clientX, sy: evt.clientY };
+        svg.setPointerCapture(evt.pointerId);
         return;
       }
 
@@ -579,21 +488,17 @@
         scheduleRender();
         state.onChange({ transient: true });
       } else if (d.type === 'curve') {
-        var tc = FSM.getTransition(machine(), d.id);
-        var A = FSM.getState(machine(), tc.from), B = FSM.getState(machine(), tc.to);
-        if (!tc || !A || !B) return;
-        var mx = (A.x + B.x) / 2, my = (A.y + B.y) / 2;
-        var pp = canonPerp(tc, A, B);
-        // el tirador esta en el apice (comba/2): la comba es el doble del desvio
-        tc.curve = Math.round(((wp.x - mx) * pp.x + (wp.y - my) * pp.y) * 2);
-        d.moved = true;
-        scheduleRender();
-        state.onChange({ transient: true });
-      } else if (d.type === 'loop') {
-        var tl = FSM.getTransition(machine(), d.id);
-        var S = FSM.getState(machine(), tl.from);
-        if (!tl || !S) return;
-        tl.loopAngle = Math.round(Math.atan2(wp.y - S.y, wp.x - S.x) * 180 / Math.PI);
+        if (!d.moved && Math.abs(evt.clientX - d.sx) + Math.abs(evt.clientY - d.sy) < 4) return;
+        var mm = machine(), tc = FSM.getTransition(mm, d.id);
+        if (!tc) return;
+        var A = FSM.getState(mm, tc.from), B = FSM.getState(mm, tc.to);
+        if (!A || !B) return;
+        if (tc.from === tc.to) {
+          tc.loopAngle = Math.round(Math.atan2(wp.y - A.y, wp.x - A.x) * 180 / Math.PI);
+        } else {
+          tc.curve = Math.round(PHYS.curveFromPoint({ x: A.x, y: A.y, r: stateRadius(A) }, { x: B.x, y: B.y, r: stateRadius(B) }, wp));
+        }
+        tc.auto = false;                    // fijada a mano: la fisica ya no la mueve
         d.moved = true;
         scheduleRender();
         state.onChange({ transient: true });
@@ -609,7 +514,7 @@
       state.drag = null;
       try { state.svg.releasePointerCapture(evt.pointerId); } catch (e) {}
       if (!d) return;
-      if ((d.type === 'move' || d.type === 'curve' || d.type === 'loop') && d.moved) commit();
+      if ((d.type === 'move' || d.type === 'curve') && d.moved) commit();
       if (d.type === 'move') {
         // clic limpio (sin arrastre real) sobre un estado: arma el posible
         // doble clic para la proxima vez que se pulse sobre el mismo estado

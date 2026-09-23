@@ -272,10 +272,21 @@
       h('button', { text: '↓', title: 'bajar prioridad', onclick: function () { FSM.moveTransitionPriority(m, t.id, 1); refreshSelectionPanel(); refreshDerivedNow(); } })
     ]));
 
-    if (t.from === t.to) {
-      wrap.appendChild(sliderField('Angulo del bucle', -180, 180, t.loopAngle, function (v) { t.loopAngle = v; EDITOR.render(); autosave(); }));
-    } else {
-      wrap.appendChild(sliderField('Curvatura', -180, 180, t.curve, function (v) { t.curve = v; EDITOR.render(); autosave(); }));
+    var isLoopT = t.from === t.to;
+    wrap.appendChild(isLoopT
+      ? sliderField('Angulo del bucle', -180, 180, t.loopAngle, function (v) { t.loopAngle = v; t.auto = false; EDITOR.render(); autosave(); })
+      : sliderField('Curvatura', -260, 260, t.curve, function (v) { t.curve = v; t.auto = false; EDITOR.render(); autosave(); }));
+    wrap.appendChild(h('p', {
+      class: 'muted',
+      text: t.auto === false
+        ? 'Fijada a mano (también arrastrando la propia línea).'
+        : 'Automática: se acomoda sola. Arrastra la línea para fijarla.'
+    }));
+    if (t.auto === false) {
+      wrap.appendChild(h('button', {
+        class: 'wide', text: 'Volver a curvatura automática',
+        onclick: function () { t.auto = true; EDITOR.render(); refreshSelectionPanel(); autosave(); }
+      }));
     }
 
     wrap.appendChild(h('button', {
@@ -414,7 +425,10 @@
     var outI = h('input', { class: 'dlg-outputs', value: FSM.formatOutputs(t.outputs), spellcheck: 'false', placeholder: 'q=1' });
     var siblings = FSM.outgoing(m, t.from);
     var prioI = h('input', { class: 'dlg-prio', type: 'number', min: '1', max: String(siblings.length), value: siblings.indexOf(t) + 1 });
-    var curveI = h('input', { class: 'dlg-curve', type: 'number', value: Math.round(isLoop ? t.loopAngle : t.curve) });
+    var curveI = h('input', {
+      class: 'dlg-curve', type: 'number', placeholder: 'auto',
+      value: t.auto === false ? Math.round(isLoop ? t.loopAngle : t.curve) : ''
+    });
     var dcC = checkRow('Valores no definidos → DC (x)', t.dcUndefined);
 
     modal(isNew ? 'Nueva transición' : 'Transición', [
@@ -422,14 +436,20 @@
       fieldRow('Condición', condI, 'expresión Verilog; vacío = transición por defecto'),
       fieldRow('Salidas (Mealy)', outI, '"nombre=valor" separadas por coma'),
       fieldRow('Prioridad', prioI, '1 = se evalúa primero'),
-      fieldRow(isLoop ? 'Ángulo del bucle (°)' : 'Curvatura', curveI, 'también ajustable arrastrando el punto azul'),
+      fieldRow(isLoop ? 'Ángulo del bucle (°)' : 'Curvatura', curveI, isLoop
+        ? 'vacío = automático · 0 = derecha, 90 = abajo, 180 = izquierda, -90 = arriba'
+        : 'vacío = automática (se acomoda sola) · o arrastra la línea'),
       dcC
     ], function () {
       t.cond = condI.value.trim();
       t.outputs = FSM.parseOutputs(outI.value);
       t.dcUndefined = dcC.input.checked;
-      if (isLoop) t.loopAngle = parseInt(curveI.value, 10) || 0;
-      else t.curve = parseInt(curveI.value, 10) || 0;
+      if (String(curveI.value).trim() === '') t.auto = true;
+      else {
+        t.auto = false;
+        if (isLoop) t.loopAngle = parseInt(curveI.value, 10) || 0;
+        else t.curve = parseInt(curveI.value, 10) || 0;
+      }
       var cur = FSM.outgoing(m, t.from).indexOf(t) + 1;
       var want = Math.max(1, Math.min(siblings.length, parseInt(prioI.value, 10) || 1));
       var step = want > cur ? 1 : -1;

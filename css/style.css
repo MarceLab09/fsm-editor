@@ -175,17 +175,17 @@ p.muted { margin: 4px 0; }
 
 .layer-edges .edge .line { stroke: var(--edge); stroke-width: 2; }
 .layer-edges .edge .head { fill: var(--edge); }
-.layer-edges .edge .hit { stroke: transparent; stroke-width: 16; cursor: pointer; }
+.layer-edges .edge .hit { stroke: transparent; stroke-width: 16; cursor: grab; }
 .layer-edges .edge:hover .line, .layer-edges .edge:hover .head { stroke: #cfe0f2; fill: #cfe0f2; }
 .layer-edges .edge.selected .line { stroke: #fff; stroke-width: 3; }
 .layer-edges .edge.selected .head { fill: #fff; }
+.layer-edges .edge-label { fill: var(--text); font-size: 12px; font-family: "Cascadia Code", Consolas, ui-monospace, monospace; pointer-events: none; }
+.layer-edges .edge-label-bg { fill: var(--bg); opacity: .85; rx: 3; pointer-events: none; }
 .layer-edges .edge .curve-handle {
   fill: var(--accent); stroke: #fff; stroke-width: 1.5;
   cursor: move; pointer-events: all;
 }
-.layer-edges .edge .curve-handle:hover { fill: #fff; r: 7; }
-.layer-edges .edge-label { fill: var(--text); font-size: 12px; font-family: "Cascadia Code", Consolas, ui-monospace, monospace; pointer-events: none; }
-.layer-edges .edge-label-bg { fill: var(--bg); opacity: .85; rx: 3; pointer-events: none; }
+.layer-edges .edge .curve-handle:hover { fill: #fff; }
 
 .layer-temp { pointer-events: none; }
 .layer-temp .temp-link { stroke: var(--ok); stroke-width: 2; stroke-dasharray: 5 4; fill: none; }

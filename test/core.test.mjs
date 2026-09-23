@@ -136,9 +136,12 @@ test('toda transicion nace curva (nunca recta)', () => {
   const A = FSM.createState(m, 0, 0, 'A');
   const B = FSM.createState(m, 200, 0, 'B');
   const t1 = FSM.createTransition(m, A.id, B.id, '');     // unica A->B
-  assert.equal(t1.curve, 45, 'una sola transicion tambien se comba');
+  assert.equal(t1.curve, 20, 'una sola transicion tambien se comba');
+  assert.equal(t1.auto, true, 'nace en automatico: la fisica la coloca');
   const t2 = FSM.createTransition(m, B.id, A.id, '');     // reciproca
-  assert.ok(t1.curve * t2.curve < 0, 'las reciprocas se comban a lados opuestos');
+  assert.ok(t1.curve * t2.curve > 0, 'mismo signo: la normal cambia con el sentido, asi que quedan a lados opuestos');
+  const t3 = FSM.createTransition(m, A.id, B.id, '');     // otra A->B
+  assert.ok(t1.curve * t3.curve < 0, 'las paralelas del mismo sentido alternan lado');
   const loop = FSM.createTransition(m, A.id, A.id, '');
   assert.equal(loop.curve, 0);                            // los bucles usan angulo, no comba
 });
@@ -153,7 +156,7 @@ test('migracion: aristas antiguas rectas (curve 0) pasan a arco', () => {
     initial: 's1'
   };
   const m = FSM.deserialize(JSON.stringify(legacy));
-  assert.equal(FSM.getTransition(m, 't1').curve, 45);
+  assert.equal(FSM.getTransition(m, 't1').curve, 20);
   assert.equal(FSM.getTransition(m, 't2').curve, 0);
 });
 

@@ -6,7 +6,7 @@
 (function (global) {
   'use strict';
 
-  var DEFAULT_CURVE = 45;   // comba por defecto de una transicion (px, perpendicular)
+  var DEFAULT_CURVE = 20;   // comba inicial de una transicion (px, perpendicular); la fisica la asienta
 
   /* bits necesarios para codificar `count` estados con la codificacion dada */
   function stateBits(count, encoding) {
@@ -107,20 +107,20 @@
       to: toId,
       cond: cond == null ? '' : cond,
       outputs: {},
-      curve: 0,
+      curve: 0,             // desplazamiento perpendicular del punto guia de la curva (px)
+      auto: true,           // true = la fisica coloca la curva (o el bucle); false = la fijo el usuario
       loopAngle: -90,
       dcUndefined: false,   // salidas Mealy no asignadas en esta transicion -> 'x'
       comment: ''
     };
     if (fromId !== toId) {
-      // Toda transicion se dibuja como arco (nunca recta). Una sola entre A y B
-      // se comba un poco; las paralelas se abren en abanico a ambos lados.
-      var parallel = machine.transitions.filter(function (o) {
-        return (o.from === fromId && o.to === toId) || (o.from === toId && o.to === fromId);
-      });
-      var k = parallel.length + 1;                       // esta es la k-esima
-      var mag = DEFAULT_CURVE + Math.floor((k - 1) / 2) * DEFAULT_CURVE;
-      t.curve = (k % 2 === 0) ? -mag : mag;
+      // Curva inicial; luego la fisica (physics.js) la asienta. La normal de la
+      // curva depende del sentido (A->B usa la contraria que B->A), asi que una
+      // transicion y su reciproca con el MISMO signo ya nacen a lados opuestos.
+      // Varias en el mismo sentido se abren en abanico alternando lado.
+      var same = machine.transitions.filter(function (o) { return o.from === fromId && o.to === toId; }).length;
+      var mag = DEFAULT_CURVE + Math.floor(same / 2) * 25;
+      t.curve = (same % 2 === 0) ? mag : -mag;
     } else {
       var loops = machine.transitions.filter(function (o) { return o.from === fromId && o.to === fromId; });
       t.loopAngle = -90 + loops.length * 50;
@@ -419,6 +419,7 @@
         cond: t.cond == null ? '' : String(t.cond),
         outputs: (t.outputs && typeof t.outputs === 'object') ? t.outputs : {},
         curve: Number(t.curve) || 0,
+        auto: t.auto !== false,
         loopAngle: t.loopAngle == null ? -90 : Number(t.loopAngle),
         dcUndefined: !!t.dcUndefined,
         comment: String(t.comment || '')
