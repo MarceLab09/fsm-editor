@@ -147,13 +147,13 @@ test('doble clic y tecla Enter abren el dialogo del elemento seleccionado', asyn
 });
 
 
-test('menu "Archivo" (con Exportar y Cargar ejemplo dentro): oculto por defecto, se abre/cierra y ejecuta su accion', async () => {
+test('menu "Archivo" (con submenus "Cargar ejemplo" y "Exportar"): oculto por defecto, se abre/cierra y ejecuta su accion', async () => {
   const { page, errors } = await openEditor();
 
   assert.equal(await page.locator('#menu-file-panel').isHidden(), true);
-  // Exportar ya no es un menu propio: sus botones viven dentro de Archivo
-  assert.equal(await page.locator('#menu-export-btn').count(), 0);
-  assert.equal(await page.locator('#menu-file-panel #btn-export-v').count(), 1);
+  // Exportar vive dentro de Archivo, como un submenu propio (igual que Cargar ejemplo)
+  assert.equal(await page.locator('#menu-file-panel #menu-export-btn').count(), 1);
+  assert.equal(await page.locator('#menu-export-panel').isHidden(), true);
 
   // abrir y cerrar con clic fuera
   await page.click('#menu-file-btn');
@@ -170,9 +170,14 @@ test('menu "Archivo" (con Exportar y Cargar ejemplo dentro): oculto por defecto,
   await page.waitForFunction(() => document.querySelectorAll('#canvas .layer-nodes .state').length > 0);
   assert.equal(await page.locator('#menu-file-panel').isHidden(), true, 'el menu deberia cerrarse tras elegir un ejemplo');
 
-  // Escape tambien cierra
+  // abrir "Archivo" -> submenu "Exportar" (no cierra "Archivo" de paso)
   await page.click('#menu-file-btn');
-  assert.equal(await page.locator('#menu-file-panel').isHidden(), false);
+  await page.click('#menu-export-btn');
+  assert.equal(await page.locator('#menu-export-panel').isHidden(), false);
+  assert.equal(await page.locator('#menu-file-panel').isHidden(), false, 'abrir el submenu no cierra Archivo');
+  assert.equal(await page.locator('#menu-export-panel #btn-export-v').count(), 1);
+
+  // Escape tambien cierra
   await page.keyboard.press('Escape');
   assert.equal(await page.locator('#menu-file-panel').isHidden(), true);
 
@@ -184,10 +189,12 @@ test('exportar/guardar desde el menu Archivo descargan con el nombre y extension
   const { page } = await openEditor();
 
   await page.click('#menu-file-btn');
+  await page.click('#menu-export-btn');
   const [dl1] = await Promise.all([page.waitForEvent('download'), page.click('#btn-export-v')]);
   assert.match(dl1.suggestedFilename(), /^detector_101\.v$/);
 
   await page.click('#menu-file-btn');
+  await page.click('#menu-export-btn');
   const [dl2] = await Promise.all([page.waitForEvent('download'), page.click('#btn-export-ice')]);
   assert.match(dl2.suggestedFilename(), /^detector_101\.ice$/);
 
@@ -704,12 +711,18 @@ test('Importar el "Cuerpo .v" (sin module) da un error explicativo, no una panta
 
 /* ---- consola inferior, tabla de transicion, panel de propiedades, idioma, ayuda --- */
 
-test('consola de problemas: colapsada por defecto, sin panel lateral de validacion, se expande/colapsa', async () => {
+test('consola de problemas: colapsada por defecto, acotada al area de trabajo, se expande/colapsa y se abre sola', async () => {
   const { page, errors } = await openEditor();
   assert.equal(await page.locator('#problems').count(), 0, 'el panel lateral de validacion ya no existe');
   assert.equal(await page.locator('#console-bar').count(), 1);
   assert.equal(await page.locator('#console-bar.collapsed').count(), 1, 'colapsada por defecto');
   assert.match(await page.locator('#console-badge').textContent(), /sin problemas/);
+
+  // solo abarca el area de trabajo (el lienzo), no se mete debajo del panel lateral
+  const consoleBox = await page.locator('#console-bar').boundingBox();
+  const inspectorBox = await page.locator('#inspector').boundingBox();
+  assert.ok(consoleBox.x + consoleBox.width <= inspectorBox.x + 1,
+    'la consola no deberia extenderse bajo el panel Propiedades/Salida');
 
   await page.click('#console-head');
   assert.equal(await page.locator('#console-bar.collapsed').count(), 0, 'se expande al hacer clic');
@@ -718,19 +731,24 @@ test('consola de problemas: colapsada por defecto, sin panel lateral de validaci
   await page.click('#console-head');
   assert.equal(await page.locator('#console-bar.collapsed').count(), 1, 'se vuelve a colapsar');
 
-  // anadir un estado inalcanzable genera un aviso visible en la consola
+  // anadir un estado inalcanzable genera un aviso Y la consola se abre sola
   await page.click('#mode-state');
   const c = await page.locator('#canvas').boundingBox();
   await page.mouse.click(c.x + 400, c.y + 40);
   await page.waitForSelector('.modal-overlay');
   await page.keyboard.press('Escape');
   await page.waitForFunction(() => !document.getElementById('console-badge').textContent.includes('sin problemas'));
+  assert.equal(await page.locator('#console-bar.collapsed').count(), 0, 'se abre sola al aparecer un problema');
   assert.deepEqual(errors, []);
   await page.close();
 });
 
-test('tabla de transicion de estados: refleja estados, condiciones, siguiente y salidas', async () => {
+test('tabla de transicion de estados: vive en la pestana "Salida", refleja estados, condiciones, siguiente y salidas', async () => {
   const { page, errors } = await openEditor();
+  // vive en "Salida", no en "Propiedades" (la pestana activa por defecto)
+  assert.equal(await page.locator('#panel-props #transition-table').count(), 0);
+  assert.equal(await page.locator('#panel-code #transition-table').count(), 1);
+  await page.getByText('Salida', { exact: true }).click();
   const table = page.locator('#transition-table table');
   await page.waitForSelector('#transition-table table');
   const rowCount = await table.locator('tbody tr').count();
@@ -769,6 +787,7 @@ test('selector de idioma: cambiar a EN traduce la barra y el panel; guarda la pr
 
 test('boton Ayuda: abre un dialogo con Moore vs Mealy y como usarlo', async () => {
   const { page, errors } = await openEditor();
+  assert.equal((await page.locator('#btn-help').textContent()).trim(), '?', 'solo el icono, sin texto "Ayuda"');
   await page.click('#btn-help');
   await page.waitForSelector('.modal-overlay');
   const body = await page.locator('.modal-body').textContent();

@@ -449,6 +449,7 @@
   }
 
   /* ---- validacion ---- */
+  var hadProblems = false;
   function refreshProblems() {
     var probs = FSM.validate(M());
     var ul = $('console-list');
@@ -458,6 +459,11 @@
       ? (errs ? I18N.t('console.errors', { n: errs }) : I18N.t('console.warnings', { n: probs.length }))
       : I18N.t('console.ok');
     $('console-badge').className = 'badge ' + (errs ? 'bad' : (probs.length ? 'warn' : 'ok'));
+    // se abre sola cuando aparece un problema nuevo (no cada vez que se
+    // refresca mientras ya hay alguno: si el usuario la colapsa a mano,
+    // que se quede colapsada hasta la proxima vez que vuelva a aparecer uno)
+    if (probs.length && !hadProblems) $('console-bar').classList.remove('collapsed');
+    hadProblems = probs.length > 0;
     if (!probs.length) {
       ul.appendChild(h('li', { class: 'ok', text: I18N.t('console.okRow') }));
       return;
