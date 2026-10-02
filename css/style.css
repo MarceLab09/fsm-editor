@@ -167,9 +167,9 @@ p.muted { margin: 4px 0; }
 .io-field > span { width: 90px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
 
 .badge { font-size: 11px; padding: 2px 7px; border-radius: 10px; background: var(--panel-2); border: 1px solid var(--line); }
-.badge.ok { color: var(--ok); }
-.badge.warn { color: var(--warn); }
-.badge.bad { color: var(--bad); }
+.badge.ok { color: var(--ok); border-color: var(--ok); }
+.badge.warn { color: var(--warn); border-color: var(--warn); }
+.badge.bad { color: var(--bad); border-color: var(--bad); }
 
 /* ---------- consola de problemas (estilo consola de compilacion, abajo) ---------- */
 #console-bar {
