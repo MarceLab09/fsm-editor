@@ -10,6 +10,57 @@
   function M() { return store.m; }
 
   /* --------------------------------------------------------------------- */
+  /* Deshacer / Rehacer                                                    */
+  /* Snapshots completos (igual que el .fsm) en vez de un diff: la maquina  */
+  /* es pequena y serializar es barato, asi que esto es simple y robusto.   */
+  /* checkpoint() se llama al final de cada cambio "definitivo" (no de los  */
+  /* fotogramas transitorios de un arrastre) desde refreshDerived/Now.      */
+  /* --------------------------------------------------------------------- */
+  var MAX_HISTORY = 100;
+  var undoStack = [], redoStack = [];
+  var lastSnapshot = null;
+  var restoring = false;
+
+  function updateHistoryButtons() {
+    var u = $('btn-undo'), r = $('btn-redo');
+    if (u) u.disabled = undoStack.length === 0;
+    if (r) r.disabled = redoStack.length === 0;
+  }
+  function checkpoint() {
+    if (restoring || !store.m) return;
+    var cur = FSM.serialize(M());
+    if (lastSnapshot === null) { lastSnapshot = cur; return; }
+    if (cur === lastSnapshot) return;
+    undoStack.push(lastSnapshot);
+    if (undoStack.length > MAX_HISTORY) undoStack.shift();
+    redoStack.length = 0;
+    lastSnapshot = cur;
+    updateHistoryButtons();
+  }
+  function restoreSnapshot(str) {
+    restoring = true;
+    try {
+      store.m = FSM.deserialize(str);
+      lastSnapshot = str;
+      EDITOR.render();
+      EDITOR.setSelection(null);
+      refreshAll();
+      autosave();
+    } finally { restoring = false; }
+    updateHistoryButtons();
+  }
+  function undo() {
+    if (!undoStack.length) return;
+    redoStack.push(FSM.serialize(M()));
+    restoreSnapshot(undoStack.pop());
+  }
+  function redo() {
+    if (!redoStack.length) return;
+    undoStack.push(FSM.serialize(M()));
+    restoreSnapshot(redoStack.pop());
+  }
+
+  /* --------------------------------------------------------------------- */
   /* Helpers DOM                                                           */
   /* --------------------------------------------------------------------- */
   function h(tag, attrs, kids) {
@@ -84,6 +135,10 @@
 
   function loadMachine(machine, doFit) {
     store.m = machine;
+    undoStack.length = 0;
+    redoStack.length = 0;
+    lastSnapshot = FSM.serialize(machine);
+    updateHistoryButtons();
     EDITOR.render();
     if (doFit) EDITOR.fit();
     EDITOR.setSelection(null);
@@ -98,6 +153,7 @@
     refreshVerilog();
     refreshProblems();
     autosave();
+    checkpoint();
   }, 250);
 
   function refreshAll() {
@@ -518,6 +574,7 @@
     refreshVerilog();
     refreshProblems();
     autosave();
+    checkpoint();
   }
 
   /* --------------------------------------------------------------------- */
@@ -554,13 +611,15 @@
   /* --------------------------------------------------------------------- */
   /* Barra de herramientas                                                 */
   /* --------------------------------------------------------------------- */
+  function newMachine() {
+    if (!confirm('Empezar una maquina nueva? Se perdera lo actual (salvo que lo hayas guardado).')) return;
+    var m = FSM.createMachine();
+    FSM.createState(m, 240, 220, 'IDLE');
+    loadMachine(m, true);
+  }
+
   function bindToolbar() {
-    $('btn-new').addEventListener('click', function () {
-      if (!confirm('Empezar una maquina nueva? Se perdera lo actual (salvo que lo hayas guardado).')) return;
-      var m = FSM.createMachine();
-      FSM.createState(m, 240, 220, 'IDLE');
-      loadMachine(m, true);
-    });
+    $('btn-new').addEventListener('click', newMachine);
     $('btn-demo').addEventListener('click', function () { loadMachine(FSM.demoMachine(), true); });
     $('btn-fit').addEventListener('click', function () { EDITOR.fit(); });
     $('btn-edit').addEventListener('click', function () { openEditor(EDITOR.getSelection()); });
@@ -609,6 +668,27 @@
       this.value = '';
     });
 
+    $('btn-import-v').addEventListener('click', function () { $('file-input-v').click(); });
+    $('file-input-v').addEventListener('change', function () {
+      var f = this.files && this.files[0];
+      if (!f) return;
+      var rd = new FileReader();
+      rd.onload = function () {
+        try {
+          var m = VIMPORT.parseModule(String(rd.result));
+          loadMachine(m, true);
+        } catch (e) {
+          alert('No se pudo importar el Verilog: ' + (e && e.message ? e.message : e));
+        }
+      };
+      rd.readAsText(f);
+      this.value = '';
+    });
+
+    $('btn-undo').addEventListener('click', undo);
+    $('btn-redo').addEventListener('click', redo);
+    $('btn-shortcuts').addEventListener('click', openShortcutsDialog);
+
     $('btn-export-v').addEventListener('click', function () {
       download(safe(M().name) + '.v', VERILOG.generateModule(M()), 'text/plain');
     });
@@ -636,6 +716,93 @@
   function safe(name) { return String(name || 'fsm').replace(/[^A-Za-z0-9_.-]/g, '_'); }
 
   /* --------------------------------------------------------------------- */
+  /* Duplicar el elemento seleccionado (Ctrl+D)                            */
+  /* --------------------------------------------------------------------- */
+  function duplicateSelection() {
+    var sel = EDITOR.getSelection();
+    if (!sel) return;
+    var m = M();
+    if (sel.kind === 'state') {
+      var s = FSM.getState(m, sel.id);
+      if (!s) return;
+      var ns = FSM.createState(m, s.x + 36, s.y + 36);
+      ns.outputs = JSON.parse(JSON.stringify(s.outputs || {}));
+      ns.radius = s.radius;
+      ns.dcUndefined = s.dcUndefined;
+      EDITOR.render(); refreshAll(); refreshDerivedNow();
+      EDITOR.setSelection({ kind: 'state', id: ns.id });
+    } else {
+      var t = FSM.getTransition(m, sel.id);
+      if (!t) return;
+      var nt = FSM.createTransition(m, t.from, t.to, t.cond);
+      nt.outputs = JSON.parse(JSON.stringify(t.outputs || {}));
+      nt.dcUndefined = t.dcUndefined;
+      EDITOR.render(); refreshAll(); refreshDerivedNow();
+      EDITOR.setSelection({ kind: 'transition', id: nt.id });
+    }
+  }
+
+  /* --------------------------------------------------------------------- */
+  /* Atajos de teclado globales                                            */
+  /* --------------------------------------------------------------------- */
+  function openShortcutsDialog() {
+    var groups = [
+      ['General', [
+        ['Ctrl+Z', 'Deshacer'],
+        ['Ctrl+Y  ·  Ctrl+Shift+Z', 'Rehacer'],
+        ['Ctrl+S', 'Guardar máquina de estado (.fsm)'],
+        ['Ctrl+O', 'Abrir máquina de estado (.fsm)'],
+        ['Ctrl+N', 'Máquina nueva']
+      ]],
+      ['Selección', [
+        ['Enter', 'Editar el elemento seleccionado'],
+        ['Supr  ·  Retroceso', 'Eliminar el elemento seleccionado'],
+        ['Ctrl+D', 'Duplicar el elemento seleccionado'],
+        ['Escape', 'Deseleccionar / cancelar el modo actual']
+      ]],
+      ['Lienzo', [
+        ['Arrastrar un estado', 'Moverlo'],
+        ['Shift + arrastrar (o el borde del estado)', 'Crear una transición'],
+        ['Arrastrar la línea (o su punto azul)', 'Curvarla a mano'],
+        ['Rueda del ratón', 'Zoom'],
+        ['S  ·  T  ·  V', 'Modo: + Estado  ·  + Transición  ·  Seleccionar']
+      ]]
+    ];
+    var rows = [];
+    groups.forEach(function (g) {
+      rows.push({ el: h('h4', { text: g[0] }) });
+      var ul = h('ul', { style: 'margin:0 0 4px;padding-left:18px' });
+      g[1].forEach(function (item) {
+        ul.appendChild(h('li', {}, [h('b', { text: item[0] }), h('span', { text: '  —  ' + item[1] })]));
+      });
+      rows.push({ el: ul });
+    });
+    modal('Atajos de teclado', rows, function () {}, {});
+  }
+
+  function bindShortcuts() {
+    window.addEventListener('keydown', function (evt) {
+      var tag = (evt.target && evt.target.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+      if (document.querySelector('.modal-overlay')) return;
+      var ctrl = evt.ctrlKey || evt.metaKey;
+      if (ctrl && !evt.shiftKey && (evt.key === 'z' || evt.key === 'Z')) { evt.preventDefault(); undo(); return; }
+      if (ctrl && ((evt.key === 'y' || evt.key === 'Y') || (evt.shiftKey && (evt.key === 'z' || evt.key === 'Z')))) {
+        evt.preventDefault(); redo(); return;
+      }
+      if (ctrl && (evt.key === 's' || evt.key === 'S')) {
+        evt.preventDefault();
+        download(safe(M().name) + '.fsm', FSM.serialize(M()), 'application/json');
+        return;
+      }
+      if (ctrl && (evt.key === 'o' || evt.key === 'O')) { evt.preventDefault(); $('file-input').click(); return; }
+      if (ctrl && (evt.key === 'n' || evt.key === 'N')) { evt.preventDefault(); newMachine(); return; }
+      if (ctrl && (evt.key === 'd' || evt.key === 'D')) { evt.preventDefault(); duplicateSelection(); return; }
+      if (!ctrl && !evt.altKey && evt.key === '?') { openShortcutsDialog(); }
+    });
+  }
+
+  /* --------------------------------------------------------------------- */
   /* Arranque                                                              */
   /* --------------------------------------------------------------------- */
   function boot() {
@@ -655,6 +822,7 @@
     bindModulePanel();
     bindToolbar();
     bindMenus();
+    bindShortcuts();
 
     var restored = null;
     try {

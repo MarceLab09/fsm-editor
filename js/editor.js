@@ -566,6 +566,9 @@
     window.addEventListener('keydown', function (evt) {
       var tag = (evt.target && evt.target.tagName || '').toLowerCase();
       if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+      // los atajos con Ctrl/Cmd/Alt son del documento (deshacer, guardar...),
+      // no del lienzo: aqui solo se manejan teclas sueltas.
+      if (evt.ctrlKey || evt.metaKey || evt.altKey) return;
       if (evt.key === 'Enter') {
         if (state.selection) { state.onEdit(state.selection); evt.preventDefault(); }
       } else if (evt.key === 'Delete' || evt.key === 'Backspace') {

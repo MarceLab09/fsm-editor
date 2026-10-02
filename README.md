@@ -21,11 +21,11 @@ y entra en `http://localhost:8000`.
 
 Dos menús desplegables agrupan lo que no se usa a cada clic:
 
-- **Archivo ▾** — Nuevo, Cargar ejemplo, Guardar / Abrir máquina de estado (`.fsm`).
+- **Archivo ▾** — Nuevo, Cargar ejemplo, Guardar / Abrir máquina de estado (`.fsm`), **Importar desde Verilog (`.v`)**.
 - **Exportar ▾** — Verilog `.v` (módulo completo), Cuerpo `.v` (Icestudio `basic.code`), `.ice`.
 
-El resto (modo del ratón, **Editar…**, **Ajustar vista**) son botones sueltos,
-porque se usan todo el rato.
+El resto (modo del ratón, **Deshacer / Rehacer**, **Editar…**, **Ajustar vista**,
+**⌨ Atajos**) son botones sueltos, porque se usan todo el rato.
 
 ## Controles del lienzo
 
@@ -40,14 +40,24 @@ porque se usan todo el rato.
 | Editar transición | **doble clic en la flecha** → diálogo: condición, salidas (Mealy), prioridad, curvatura / ángulo del bucle (vacío = automático), «valores no definidos → DC» |
 | Curvar una transición | **arrastrar la propia línea** (queda fijada a mano; en el panel, «Volver a curvatura automática») |
 | Seleccionar | clic |
+| Duplicar | **Ctrl+D** sobre el estado/transición seleccionado |
 | Borrar | tecla **Supr / Backspace** |
+| Deshacer / Rehacer | **Ctrl+Z** / **Ctrl+Y** (o Ctrl+Shift+Z) |
 | Zoom | rueda del ratón |
 | Pan | arrastrar el fondo |
 | Ajustar vista | botón **Ajustar vista** |
 
 Atajos de modo: `V` seleccionar · `S` añadir estado · `T` añadir transición · `Esc` cancelar / cerrar diálogo.
+Atajos de documento: `Ctrl+S` guardar `.fsm` · `Ctrl+O` abrir `.fsm` · `Ctrl+N` máquina nueva · `?` ver todos los atajos
+(también el botón **⌨ Atajos** de la barra).
 
 Los diálogos también están replicados en el panel lateral **Propiedades** (edición rápida sin modal).
+
+Deshacer/rehacer guarda snapshots completos del modelo (como el `.fsm`), no un
+diff por campo — cualquier cambio "definitivo" (no los fotogramas de un
+arrastre en curso) queda en la pila. Empezar una máquina nueva, cargar el
+ejemplo, abrir un `.fsm` o importar un Verilog reinician el historial (son
+documentos distintos).
 
 ### Transiciones: curvas «a lo Digital»
 
@@ -136,6 +146,28 @@ Dos variantes:
   `module` ni redeclarar puertos. Para pegar dentro de un bloque **`basic.code`**
   de Icestudio.
 
+### Importar desde Verilog
+
+**Archivo ▾ → Importar desde Verilog (.v)** reconstruye el diagrama (estados,
+transiciones, condiciones, salidas Moore/Mealy, reloj/reset, codificación...)
+a partir de un archivo `.v`. No es un parser de Verilog general: lee la
+**estructura exacta de 3 bloques** que exporta este editor (registro de
+estado / próximo estado / salidas, con un `case` y cadenas `if`/`else if` por
+estado) — la misma con la que suele escribirse una FSM "a mano" siguiendo el
+estilo clásico. Reimportar un `.v` exportado por este editor reproduce,
+reexportado, el **mismo texto byte a byte**.
+
+Limitaciones a tener en cuenta:
+
+- Solo el **módulo completo** (`module … endmodule`); el "Cuerpo `.v`" para
+  Icestudio no declara puertos y no se puede reconstruir desde ahí.
+- Las posiciones de los estados no existen en el Verilog: se colocan en
+  círculo y la física los acomoda.
+- Un `if`/`case` por línea, como lo genera este editor; Verilog escrito con
+  otro formato (sentencias combinadas en una línea, bloques anidados) puede
+  no reconocerse. El importador avisa con un mensaje explicando qué no pudo
+  interpretar en vez de fallar en silencio.
+
 ## Exportación a Icestudio
 
 - **`.ice`** — un archivo de bloque: un `basic.code` con el cuerpo Verilog ya
@@ -162,9 +194,10 @@ css/style.css
 js/model.js        modelo de datos + validación (global FSM)
 js/verilog.js      generador Verilog-2001 (global VERILOG)
 js/icestudio.js    generador de archivo .ice (global ICE)
+js/vimport.js      importador: reconstruye el modelo a partir de un .v (global VIMPORT)
 js/physics.js      curvas a lo Digital: arco, física de los puntos guía, deshacer cruces (global PHYS)
 js/editor.js       lienzo SVG: dibujar, mover, pan/zoom, seleccionar (global EDITOR)
-js/app.js          barra de herramientas, inspector, exportación
+js/app.js          barra de herramientas, inspector, deshacer/rehacer, atajos, exportación
 test/              pruebas (core en Node + UI con Playwright)
 ```
 

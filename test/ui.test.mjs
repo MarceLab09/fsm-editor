@@ -587,3 +587,84 @@ test('doble clic en una transicion: dialogo de condicion', async () => {
   await page.close();
 });
 
+/* ---- deshacer / rehacer, duplicar, atajos, importar Verilog --------------- */
+
+test('Ctrl+Z / Ctrl+Y deshacen y rehacen crear un estado; los botones reflejan el historial', async () => {
+  const { page, errors } = await openEditor();
+  const before = await nodeCount(page);
+  assert.equal(await page.locator('#btn-undo').isDisabled(), true, 'sin historial al abrir');
+
+  await page.click('#mode-state');
+  const c = await page.locator('#canvas').boundingBox();
+  await page.mouse.click(c.x + 300, c.y + 300);
+  await dismissModal(page);                                  // cancela el dialogo del nuevo estado; el estado queda creado
+  await page.waitForFunction((n) => document.querySelectorAll('#canvas .layer-nodes .state').length === n, before + 1);
+  await page.waitForFunction(() => !document.getElementById('btn-undo').disabled);
+
+  await page.keyboard.press('Control+z');
+  await page.waitForFunction((n) => document.querySelectorAll('#canvas .layer-nodes .state').length === n, before);
+  assert.equal(await nodeCount(page), before, 'Ctrl+Z deshace la creacion');
+  assert.equal(await page.locator('#btn-redo').isDisabled(), false);
+
+  await page.keyboard.press('Control+y');
+  await page.waitForFunction((n) => document.querySelectorAll('#canvas .layer-nodes .state').length === n, before + 1);
+  assert.equal(await nodeCount(page), before + 1, 'Ctrl+Y rehace la creacion');
+  assert.deepEqual(errors, []);
+  await page.close();
+});
+
+test('Ctrl+D duplica el estado seleccionado', async () => {
+  const { page } = await openEditor();
+  const before = await nodeCount(page);
+  await page.locator('#canvas .layer-nodes .state').first().locator('.body').click();
+  await page.keyboard.press('Control+d');
+  await page.waitForFunction((n) => document.querySelectorAll('#canvas .layer-nodes .state').length === n, before + 1);
+  assert.equal(await nodeCount(page), before + 1);
+  await page.close();
+});
+
+test('boton "Atajos" abre un dialogo informativo con los atajos', async () => {
+  const { page, errors } = await openEditor();
+  await page.click('#btn-shortcuts');
+  await page.waitForSelector('.modal-overlay');
+  assert.match(await page.locator('.modal-title').textContent(), /Atajos/);
+  assert.match(await page.locator('.modal-body').textContent(), /Ctrl\+Z/);
+  await dismissModal(page);
+  assert.deepEqual(errors, []);
+  await page.close();
+});
+
+test('Importar desde Verilog: el .v exportado del demo reconstruye el mismo diagrama', async () => {
+  const { page, errors } = await openEditor();
+  await waitStable(page);
+  await page.waitForFunction(() => !!localStorage.getItem('fsm-editor:autosave'));
+  const v = await page.evaluate(() => VERILOG.generateModule(JSON.parse(localStorage.getItem('fsm-editor:autosave'))));
+
+  await page.locator('#file-input-v').setInputFiles({ name: 'detector_101.v', mimeType: 'text/plain', buffer: Buffer.from(v, 'utf8') });
+
+  await page.waitForFunction(() => {
+    const raw = localStorage.getItem('fsm-editor:autosave');
+    return raw && JSON.parse(raw).states.length === 4;
+  });
+  const m = await page.evaluate(() => JSON.parse(localStorage.getItem('fsm-editor:autosave')));
+  assert.equal(m.name, 'detector_101');
+  assert.equal(m.states.length, 4);
+  assert.equal(m.transitions.length, 8);
+  assert.equal(await nodeCount(page), 4);
+  assert.equal(await edgeCount(page), 8);
+  assert.deepEqual(errors, []);
+  await page.close();
+});
+
+test('Importar el "Cuerpo .v" (sin module) da un error explicativo, no una pantalla rota', async () => {
+  const { page, errors } = await openEditor();
+  await page.waitForFunction(() => !!localStorage.getItem('fsm-editor:autosave'));
+  const body = await page.evaluate(() => VERILOG.generateBody(JSON.parse(localStorage.getItem('fsm-editor:autosave'))));
+  page.once('dialog', (d) => d.accept());
+  await page.locator('#file-input-v').setInputFiles({ name: 'cuerpo.v', mimeType: 'text/plain', buffer: Buffer.from(body, 'utf8') });
+  await page.waitForTimeout(200);
+  assert.equal(await nodeCount(page), 4, 'el diagrama original no se toco tras el error');
+  assert.deepEqual(errors, []);
+  await page.close();
+});
+
