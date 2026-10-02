@@ -19,39 +19,41 @@ y entra en `http://localhost:8000`.
 
 ## Barra de herramientas
 
-Dos menús desplegables agrupan lo que no se usa a cada clic:
+Un único menú desplegable agrupa lo que no se usa a cada clic — **Archivo ▾**:
+Nuevo, **Cargar ejemplo ▸** (submenú con los ejemplos incluidos), Guardar /
+Abrir máquina de estado (`.fsm`), **Importar desde Verilog (`.v`)**, y la
+exportación (Verilog `.v` módulo completo, Cuerpo `.v` para Icestudio, `.ice`).
 
-- **Archivo ▾** — Nuevo, Cargar ejemplo, Guardar / Abrir máquina de estado (`.fsm`), **Importar desde Verilog (`.v`)**.
-- **Exportar ▾** — Verilog `.v` (módulo completo), Cuerpo `.v` (Icestudio `basic.code`), `.ice`.
+El resto son botones sueltos porque se usan todo el rato: modo del ratón
+(**+ Estado**, **+ Transición** — «Seleccionar» es simplemente el estado por
+defecto, sin botón propio), **Deshacer / Rehacer**, el selector de **idioma**
+(ES/EN) y **Ayuda** (cómo usar el editor + Moore vs. Mealy, ver más abajo).
 
-El resto (modo del ratón, **Deshacer / Rehacer**, **Editar…**, **Ajustar vista**,
-**⌨ Atajos**) son botones sueltos, porque se usan todo el rato.
+Sobre el lienzo flota un widget semitransparente con los controles de vista
+(**acercar / recentrar / alejar**) en la esquina inferior derecha.
 
 ## Controles del lienzo
 
 | Acción | Cómo |
 |---|---|
 | Nuevo estado | doble clic en el fondo (abre el diálogo) o **+ Estado** + clic |
-| Abrir el diálogo (menú) | **doble clic** en el estado/transición · o selecciónalo y pulsa **Enter** · o el botón **«Editar…»** de la barra |
+| Abrir el diálogo de edición | **doble clic** en el estado/transición, o selecciónalo y pulsa **Enter** |
 | Editar estado | diálogo: etiqueta, número de estado, estado inicial, salidas (Moore), radio, «valores no definidos → DC» |
 | Mover estado | arrastrarlo (con la rejilla; `Alt` = libre) |
 | Nueva transición | **Shift + arrastrar** de un estado a otro, **o arrastrar desde el borde** del estado, o botón **+ Transición**. Al soltar se abre el diálogo de la transición |
 | Auto-transición | arrastrar (con Shift o desde el borde) de un estado a sí mismo |
 | Editar transición | **doble clic en la flecha** → diálogo: condición, salidas (Mealy), prioridad, curvatura / ángulo del bucle (vacío = automático), «valores no definidos → DC» |
-| Curvar una transición | **arrastrar la propia línea** (queda fijada a mano; en el panel, «Volver a curvatura automática») |
+| Curvar una transición | **arrastrar la propia línea** (o el punto azul que aparece al seleccionarla); queda fijada a mano. Para volver a automática: diálogo de la transición, campo de curvatura vacío |
 | Seleccionar | clic |
 | Duplicar | **Ctrl+D** sobre el estado/transición seleccionado |
 | Borrar | tecla **Supr / Backspace** |
 | Deshacer / Rehacer | **Ctrl+Z** / **Ctrl+Y** (o Ctrl+Shift+Z) |
-| Zoom | rueda del ratón |
+| Zoom | rueda del ratón, o **+ / −** del widget flotante |
 | Pan | arrastrar el fondo |
-| Ajustar vista | botón **Ajustar vista** |
+| Ajustar vista | botón **⤢** del widget flotante |
 
-Atajos de modo: `V` seleccionar · `S` añadir estado · `T` añadir transición · `Esc` cancelar / cerrar diálogo.
-Atajos de documento: `Ctrl+S` guardar `.fsm` · `Ctrl+O` abrir `.fsm` · `Ctrl+N` máquina nueva · `?` ver todos los atajos
-(también el botón **⌨ Atajos** de la barra).
-
-Los diálogos también están replicados en el panel lateral **Propiedades** (edición rápida sin modal).
+Atajos de modo: `S` añadir estado · `T` añadir transición · `V` volver a seleccionar · `Esc` cancelar / cerrar diálogo.
+Atajos de documento: `Ctrl+S` guardar `.fsm` · `Ctrl+O` abrir `.fsm` · `Ctrl+N` máquina nueva · `?` ver todos los atajos.
 
 Deshacer/rehacer guarda snapshots completos del modelo (como el `.fsm`), no un
 diff por campo — cualquier cambio "definitivo" (no los fotogramas de un
@@ -77,7 +79,7 @@ El comportamiento está tomado del editor de máquinas de estado de
   con animación.
 - **Arrastrar la línea, o el punto azul que aparece sobre ella al
   seleccionarla,** mueve su punto guía y la **fija a mano** (la física ya no
-  la toca). En el panel *Seleccion* o en el diálogo (campo vacío) vuelve a
+  la toca). En el diálogo de la transición (campo de curvatura vacío) vuelve a
   **automática**.
 - Las auto-transiciones son un bucle cuyo ángulo automático apunta lejos de los
   estados vecinos y del triangulito de inicio.
@@ -121,13 +123,50 @@ antes que atravesar un estado o forzar una búsqueda mucho más lenta.
   se ajusta con las flechas ↑ / ↓ o el campo *Prioridad* del diálogo.
 - **Reset**: asíncrono/síncrono y activo en alto/bajo.
 - **Codificación**: binaria, Gray o one-hot.
-- El panel **Validación** avisa de estados inalcanzables, nombres inválidos,
-  condiciones con señales no declaradas, transiciones incondicionales mal
-  colocadas, etc. Cada aviso es clicable y selecciona el elemento implicado.
 
 El proyecto se guarda/carga como **`.fsm`** (menú **Archivo**) y además hay
-autoguardado en `localStorage`. La exportación a Verilog/Icestudio vive en el
-menú **Exportar**.
+autoguardado en `localStorage`. La exportación a Verilog/Icestudio también
+vive en el menú **Archivo**.
+
+## Consola de problemas
+
+Una barra colapsable en la parte inferior de la pantalla (estilo consola de
+compilación de un IDE) sustituye al antiguo panel lateral de validación.
+Muestra en vivo los errores y avisos de `FSM.validate()` (estados
+inalcanzables, nombres inválidos, condiciones con señales no declaradas,
+transiciones incondicionales mal colocadas, etc.) con el recuento en la
+cabecera; haz clic en la cabecera para expandirla/colapsarla, y en un aviso
+concreto para seleccionar el estado o transición implicado en el lienzo.
+
+## Tabla de transición de estados
+
+En el panel **Propiedades**, debajo de Entradas/Salidas, una tabla en vivo
+resume la máquina completa: una fila por cada transición saliente de cada
+estado, con su condición, el estado siguiente y las salidas (Mealy de la
+transición; las salidas Moore del estado de origen aparecen bajo su nombre).
+Se actualiza automáticamente con cualquier cambio.
+
+## Ejemplos incluidos
+
+**Archivo ▾ → Cargar ejemplo ▸** trae tres máquinas de ejemplo:
+
+- **Detector de secuencia (101)** — Moore, el ejemplo por defecto.
+- **Semáforo** — Moore, 3 estados en ciclo sobre una entrada `tick`.
+- **Puerta con clave (Mealy)** — 2 estados; la salida `abierto` es un pulso
+  Mealy de un ciclo (no un nivel de estado), para contrastar con el detector.
+
+## Idioma y ayuda
+
+El selector **ES/EN** de la barra traduce el menú, el panel lateral, los
+diálogos y los mensajes de la interfaz (la preferencia se guarda en
+`localStorage`). El botón **Ayuda** abre un resumen rápido de cómo usar el
+editor y una explicación de **Moore vs. Mealy** con los ejemplos incluidos
+como referencia.
+
+> Nota de alcance: los mensajes que genera `FSM.validate()` (el contenido de
+> la consola de problemas) y las alertas de error al importar un archivo se
+> construyen en español con nombres de usuario incrustados y, por ahora, no
+> se traducen con el selector de idioma.
 
 ## Exportación a Verilog
 
@@ -191,13 +230,14 @@ Limitaciones a tener en cuenta:
 ```
 index.html
 css/style.css
-js/model.js        modelo de datos + validación (global FSM)
+js/i18n.js         diccionario ES/EN de la interfaz (global I18N)
+js/model.js        modelo de datos + validación + ejemplos incluidos (global FSM)
 js/verilog.js      generador Verilog-2001 (global VERILOG)
 js/icestudio.js    generador de archivo .ice (global ICE)
 js/vimport.js      importador: reconstruye el modelo a partir de un .v (global VIMPORT)
 js/physics.js      curvas a lo Digital: arco, física de los puntos guía, deshacer cruces (global PHYS)
 js/editor.js       lienzo SVG: dibujar, mover, pan/zoom, seleccionar (global EDITOR)
-js/app.js          barra de herramientas, inspector, deshacer/rehacer, atajos, exportación
+js/app.js          barra de herramientas, inspector, consola, tabla, deshacer/rehacer, idioma, ayuda
 test/              pruebas (core en Node + UI con Playwright)
 ```
 

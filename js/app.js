@@ -122,7 +122,7 @@
     var b = $('btn-copy');
     if (!b) return;
     var old = b.textContent;
-    b.textContent = 'Copiado';
+    b.textContent = I18N.t('code.copied');
     setTimeout(function () { b.textContent = old; }, 1200);
   }
 
@@ -159,7 +159,7 @@
   function refreshAll() {
     refreshModulePanel();
     refreshPortsPanel();
-    refreshSelectionPanel();
+    refreshTransitionTable();
     refreshProblems();
     refreshVerilog();
   }
@@ -234,133 +234,56 @@
     m.outputs.forEach(function (p) { outWrap.appendChild(portRow('output', p)); });
   }
 
-  /* ---- panel de seleccion ---- */
-  function outputsEditor(map, container) {
-    clearEl(container);
-    var m = M();
-    if (m.outputs.length === 0) {
-      container.appendChild(h('p', { class: 'muted', text: 'No hay salidas declaradas.' }));
-      return;
-    }
-    m.outputs.forEach(function (p) {
-      var inp = h('input', {
-        value: map[p.name] == null ? '' : map[p.name],
-        placeholder: 'def: ' + p.def, spellcheck: 'false',
-        onchange: function () {
-          var v = this.value.trim();
-          if (v === '') delete map[p.name];
-          else map[p.name] = v;
-          EDITOR.render();
-          refreshDerived();
-        }
-      });
-      container.appendChild(h('label', { class: 'io-field' }, [h('span', { text: p.name }), inp]));
-    });
+  /* ---- tabla de transicion de estados (resumen en vivo) ---- */
+  function stateCell(s, moore, rowspan) {
+    var td = h('td', { class: 'state-cell', rowspan: rowspan || 1 });
+    var isInit = M().initial === s.id;
+    td.appendChild(h('div', { text: s.name + (isInit ? ' ▶' : '') }));
+    if (moore) td.appendChild(h('div', { class: 'state-moore', text: moore }));
+    return td;
   }
-
-  function refreshSelectionPanel() {
-    var sel = EDITOR.getSelection();
+  function refreshTransitionTable() {
     var m = M();
-    var wrap = $('selection-panel');
+    var wrap = $('transition-table');
     clearEl(wrap);
-
-    if (!sel) {
-      wrap.appendChild(h('p', { class: 'muted', text: 'Selecciona un estado o una transicion en el lienzo (doble clic o Enter para editarlo).' }));
+    if (!m.states.length) {
+      wrap.appendChild(h('p', { class: 'muted', text: I18N.t('table.empty') }));
       return;
     }
-
-    if (sel.kind === 'state') {
-      var s = FSM.getState(m, sel.id);
-      if (!s) return;
-      wrap.appendChild(h('h3', { text: 'Estado' }));
-      wrap.appendChild(h('label', { class: 'field' }, [
-        h('span', { text: 'Nombre' }),
-        h('input', {
-          value: s.name, spellcheck: 'false',
-          onchange: function () { s.name = FSM.sanitizeIdentifier(this.value.trim(), s.name); this.value = s.name; EDITOR.render(); refreshDerivedNow(); }
-        })
-      ]));
-      var isInit = m.initial === s.id;
-      wrap.appendChild(h('button', {
-        class: 'wide' + (isInit ? ' active' : ''),
-        text: isInit ? 'Es el estado inicial' : 'Marcar como estado inicial',
-        onclick: function () { m.initial = s.id; EDITOR.render(); refreshSelectionPanel(); refreshDerivedNow(); }
-      }));
-      wrap.appendChild(h('h4', { text: 'Salidas en este estado (Moore)' }));
-      var oc = h('div', { class: 'io-list' });
-      wrap.appendChild(oc);
-      outputsEditor(s.outputs, oc);
-      wrap.appendChild(h('button', {
-        class: 'wide danger', text: 'Eliminar estado',
-        onclick: function () { FSM.deleteState(m, s.id); EDITOR.setSelection(null); EDITOR.render(); refreshAll(); refreshDerivedNow(); }
-      }));
-      return;
-    }
-
-    // transicion
-    var t = FSM.getTransition(m, sel.id);
-    if (!t) return;
-    var from = FSM.getState(m, t.from), to = FSM.getState(m, t.to);
-    var siblings = FSM.outgoing(m, t.from);
-    var prio = siblings.indexOf(t) + 1;
-
-    wrap.appendChild(h('h3', { text: 'Transicion' }));
-    wrap.appendChild(h('p', { class: 'muted', text: (from ? from.name : '?') + '  →  ' + (to ? to.name : '?') }));
-
-    wrap.appendChild(h('label', { class: 'field' }, [
-      h('span', { text: 'Condicion  (vacio = else / por defecto)' }),
-      h('input', {
-        value: t.cond, placeholder: 'p.ej.  x && !ready', spellcheck: 'false',
-        onchange: function () { t.cond = this.value.trim(); EDITOR.render(); refreshDerived(); }
-      })
-    ]));
-
-    wrap.appendChild(h('div', { class: 'row' }, [
-      h('span', { class: 'muted', text: 'Prioridad ' + prio + ' / ' + siblings.length }),
-      h('button', { text: '↑', title: 'subir prioridad', onclick: function () { FSM.moveTransitionPriority(m, t.id, -1); refreshSelectionPanel(); refreshDerivedNow(); } }),
-      h('button', { text: '↓', title: 'bajar prioridad', onclick: function () { FSM.moveTransitionPriority(m, t.id, 1); refreshSelectionPanel(); refreshDerivedNow(); } })
-    ]));
-
-    var isLoopT = t.from === t.to;
-    wrap.appendChild(isLoopT
-      ? sliderField('Angulo del bucle', -180, 180, t.loopAngle, function (v) { t.loopAngle = v; t.auto = false; EDITOR.render(); autosave(); })
-      : sliderField('Curvatura', -260, 260, t.curve, function (v) { t.curve = v; t.auto = false; EDITOR.render(); autosave(); }));
-    wrap.appendChild(h('p', {
-      class: 'muted',
-      text: t.auto === false
-        ? 'Fijada a mano (también arrastrando la propia línea).'
-        : 'Automática: se acomoda sola. Arrastra la línea para fijarla.'
-    }));
-    if (t.auto === false) {
-      wrap.appendChild(h('button', {
-        class: 'wide', text: 'Volver a curvatura automática',
-        onclick: function () { t.auto = true; EDITOR.render(); refreshSelectionPanel(); autosave(); }
-      }));
-    }
-
-    wrap.appendChild(h('button', {
-      class: 'wide', text: 'Invertir sentido',
-      onclick: function () { var a = t.from; t.from = t.to; t.to = a; EDITOR.render(); refreshSelectionPanel(); refreshDerivedNow(); }
-    }));
-
-    wrap.appendChild(h('h4', { text: 'Salidas en la transicion (Mealy)' }));
-    var mc = h('div', { class: 'io-list' });
-    wrap.appendChild(mc);
-    outputsEditor(t.outputs, mc);
-
-    wrap.appendChild(h('button', {
-      class: 'wide danger', text: 'Eliminar transicion',
-      onclick: function () { FSM.deleteTransition(m, t.id); EDITOR.setSelection(null); EDITOR.render(); refreshSelectionPanel(); refreshDerivedNow(); }
-    }));
-  }
-
-  function sliderField(label, min, max, value, onInput) {
-    var out = h('span', { class: 'dim', text: String(Math.round(value)) });
-    var range = h('input', {
-      type: 'range', min: min, max: max, value: value,
-      oninput: function () { out.textContent = this.value; onInput(parseInt(this.value, 10)); }
+    var table = h('table', { class: 'trans-table' });
+    table.appendChild(h('thead', {}, [h('tr', {}, [
+      h('th', { text: I18N.t('table.state') }),
+      h('th', { text: I18N.t('table.cond') }),
+      h('th', { text: I18N.t('table.next') }),
+      h('th', { text: I18N.t('table.outputs') })
+    ])]));
+    var tbody = h('tbody');
+    m.states.forEach(function (s) {
+      var outs = FSM.outgoing(m, s.id);
+      var moore = FSM.formatOutputs(s.outputs);
+      if (!outs.length) {
+        tbody.appendChild(h('tr', {}, [
+          stateCell(s, moore),
+          h('td', { class: 'muted', text: '—' }),
+          h('td', { class: 'muted', text: '—' }),
+          h('td', { class: 'muted', text: '—' })
+        ]));
+        return;
+      }
+      outs.forEach(function (t, i) {
+        var to = FSM.getState(m, t.to);
+        var cond = String(t.cond).trim();
+        var row = h('tr', {}, [
+          i === 0 ? stateCell(s, moore, outs.length) : null,
+          h('td', { text: cond === '' ? 'else' : cond }),
+          h('td', { text: to ? to.name : '?' }),
+          h('td', { text: FSM.formatOutputs(t.outputs) || '—' })
+        ].filter(function (c) { return c; }));
+        tbody.appendChild(row);
+      });
     });
-    return h('label', { class: 'field' }, [h('span', {}, [label + '  ', out]), range]);
+    table.appendChild(tbody);
+    wrap.appendChild(table);
   }
 
   /* --------------------------------------------------------------------- */
@@ -399,8 +322,8 @@
       }));
     }
     footer.appendChild(h('span', { class: 'spacer' }));
-    footer.appendChild(h('button', { text: 'Cancelar', onclick: close }));
-    footer.appendChild(h('button', { class: 'primary', text: 'Aceptar', onclick: accept }));
+    footer.appendChild(h('button', { text: I18N.t('dlg.cancel'), onclick: close }));
+    footer.appendChild(h('button', { class: 'primary', text: I18N.t('dlg.accept'), onclick: accept }));
     card.appendChild(footer);
 
     overlay.appendChild(card);
@@ -433,17 +356,17 @@
     var m = M();
     var nameI = h('input', { class: 'dlg-name', value: s.name, spellcheck: 'false' });
     var codeI = h('input', { class: 'dlg-code', type: 'number', min: '0', value: s.code == null ? '' : s.code, placeholder: 'auto' });
-    var initC = checkRow('Estado inicial', m.initial === s.id);
+    var initC = checkRow(I18N.t('dlg.state.initial'), m.initial === s.id);
     var outI = h('input', { class: 'dlg-outputs', value: FSM.formatOutputs(s.outputs), spellcheck: 'false', placeholder: 'y=1, z=0' });
     var radI = h('input', { class: 'dlg-radius', type: 'number', min: '16', value: s.radius == null ? '' : s.radius, placeholder: 'auto' });
-    var dcC = checkRow('Valores no definidos → DC (x)', s.dcUndefined);
+    var dcC = checkRow(I18N.t('dlg.state.dc'), s.dcUndefined);
 
-    modal(isNew ? 'Nuevo estado' : 'Estado', [
-      fieldRow('Etiqueta', nameI),
-      fieldRow('Número de estado', codeI, 'vacío = automático según la codificación'),
+    modal(isNew ? I18N.t('dlg.state.new') : I18N.t('dlg.state.title'), [
+      fieldRow(I18N.t('dlg.state.label'), nameI),
+      fieldRow(I18N.t('dlg.state.code'), codeI, I18N.t('dlg.state.code.hint')),
       initC,
-      fieldRow('Salidas (Moore)', outI, '"nombre=valor" separadas por coma; "run" equivale a "run=1"'),
-      fieldRow('Radio', radI, 'vacío = automático'),
+      fieldRow(I18N.t('dlg.state.outputs'), outI, I18N.t('dlg.state.outputs.hint')),
+      fieldRow(I18N.t('dlg.state.radius'), radI, I18N.t('dlg.state.radius.hint')),
       dcC
     ], function () {
       s.name = FSM.sanitizeIdentifier(nameI.value.trim(), s.name);
@@ -459,7 +382,7 @@
       refreshDerivedNow();
       EDITOR.setSelection({ kind: 'state', id: s.id });
     }, {
-      deleteLabel: 'Eliminar estado',
+      deleteLabel: I18N.t('dlg.state.delete'),
       onDelete: function () {
         FSM.deleteState(m, s.id); EDITOR.setSelection(null); EDITOR.render(); refreshAll(); refreshDerivedNow();
       }
@@ -478,16 +401,15 @@
       class: 'dlg-curve', type: 'number', placeholder: 'auto',
       value: t.auto === false ? Math.round(isLoop ? t.loopAngle : t.curve) : ''
     });
-    var dcC = checkRow('Valores no definidos → DC (x)', t.dcUndefined);
+    var dcC = checkRow(I18N.t('dlg.state.dc'), t.dcUndefined);
 
-    modal(isNew ? 'Nueva transición' : 'Transición', [
+    modal(isNew ? I18N.t('dlg.trans.new') : I18N.t('dlg.trans.title'), [
       { el: h('p', { class: 'modal-row muted', text: (from ? from.name : '?') + '  →  ' + (to ? to.name : '?') }) },
-      fieldRow('Condición', condI, 'expresión Verilog; vacío = transición por defecto'),
-      fieldRow('Salidas (Mealy)', outI, '"nombre=valor" separadas por coma'),
-      fieldRow('Prioridad', prioI, '1 = se evalúa primero'),
-      fieldRow(isLoop ? 'Ángulo del bucle (°)' : 'Curvatura', curveI, isLoop
-        ? 'vacío = automático · 0 = derecha, 90 = abajo, 180 = izquierda, -90 = arriba'
-        : 'vacío = automática (se acomoda sola) · o arrastra la línea'),
+      fieldRow(I18N.t('dlg.trans.cond'), condI, I18N.t('dlg.trans.cond.hint')),
+      fieldRow(I18N.t('dlg.trans.outputs'), outI, I18N.t('dlg.trans.outputs.hint')),
+      fieldRow(I18N.t('dlg.trans.prio'), prioI, I18N.t('dlg.trans.prio.hint')),
+      fieldRow(isLoop ? I18N.t('dlg.trans.loopAngle') : I18N.t('dlg.trans.curve'), curveI,
+        isLoop ? I18N.t('dlg.trans.loopAngle.hint') : I18N.t('dlg.trans.curve.hint')),
       dcC
     ], function () {
       t.cond = condI.value.trim();
@@ -508,7 +430,7 @@
       refreshDerivedNow();
       EDITOR.setSelection({ kind: 'transition', id: t.id });
     }, {
-      deleteLabel: 'Eliminar transición',
+      deleteLabel: I18N.t('dlg.trans.delete'),
       onDelete: function () {
         FSM.deleteTransition(m, t.id); EDITOR.setSelection(null); EDITOR.render(); refreshAll(); refreshDerivedNow();
       }
@@ -529,15 +451,15 @@
   /* ---- validacion ---- */
   function refreshProblems() {
     var probs = FSM.validate(M());
-    var ul = $('problems');
+    var ul = $('console-list');
     clearEl(ul);
     var errs = probs.filter(function (p) { return p.level === 'error'; }).length;
-    $('problem-count').textContent = probs.length
-      ? (errs ? (errs + ' error(es)') : (probs.length + ' aviso(s)'))
-      : 'sin problemas';
-    $('problem-count').className = 'badge ' + (errs ? 'bad' : (probs.length ? 'warn' : 'ok'));
+    $('console-badge').textContent = probs.length
+      ? (errs ? I18N.t('console.errors', { n: errs }) : I18N.t('console.warnings', { n: probs.length }))
+      : I18N.t('console.ok');
+    $('console-badge').className = 'badge ' + (errs ? 'bad' : (probs.length ? 'warn' : 'ok'));
     if (!probs.length) {
-      ul.appendChild(h('li', { class: 'ok', text: 'Todo correcto. El Verilog deberia sintetizar.' }));
+      ul.appendChild(h('li', { class: 'ok', text: I18N.t('console.okRow') }));
       return;
     }
     probs.forEach(function (p) {
@@ -546,6 +468,12 @@
         text: p.msg,
         onclick: p.ref ? function () { EDITOR.setSelection({ kind: p.ref.kind, id: p.ref.id }); } : null
       }));
+    });
+  }
+
+  function bindConsole() {
+    $('console-head').addEventListener('click', function () {
+      $('console-bar').classList.toggle('collapsed');
     });
   }
 
@@ -575,8 +503,12 @@
   /* --------------------------------------------------------------------- */
   function bindMenus() {
     var menus = Array.prototype.slice.call(document.querySelectorAll('.menu'));
-    function closeAll() {
+    // "except": no cierra ese menu ni ninguno de sus ancestros (para que abrir
+    // un submenu anidado -- "Cargar ejemplo" dentro de "Archivo" -- no cierre
+    // de paso el menu que lo contiene).
+    function closeAll(except) {
       menus.forEach(function (m) {
+        if (except && (m === except || m.contains(except))) return;
         m.querySelector('.menu-panel').hidden = true;
         m.querySelector('.menu-trigger').setAttribute('aria-expanded', 'false');
       });
@@ -587,7 +519,7 @@
       trigger.addEventListener('click', function (evt) {
         evt.stopPropagation();
         var wasOpen = !panel.hidden;
-        closeAll();
+        closeAll(m);
         if (!wasOpen) { panel.hidden = false; trigger.setAttribute('aria-expanded', 'true'); }
       });
       // un clic en cualquier accion del menu lo cierra (la accion ya se ejecuto
@@ -596,16 +528,16 @@
         if (evt.target.tagName === 'BUTTON') closeAll();
       });
     });
-    document.addEventListener('click', closeAll);
+    document.addEventListener('click', function () { closeAll(); });
     document.addEventListener('keydown', function (evt) { if (evt.key === 'Escape') closeAll(); });
-    window.addEventListener('blur', closeAll);
+    window.addEventListener('blur', function () { closeAll(); });
   }
 
   /* --------------------------------------------------------------------- */
   /* Barra de herramientas                                                 */
   /* --------------------------------------------------------------------- */
   function newMachine() {
-    if (!confirm('Empezar una maquina nueva? Se perdera lo actual (salvo que lo hayas guardado).')) return;
+    if (!confirm(I18N.t('confirm.newMachine'))) return;
     var m = FSM.createMachine();
     FSM.createState(m, 240, 220, 'IDLE');
     loadMachine(m, true);
@@ -613,13 +545,11 @@
 
   function bindToolbar() {
     $('btn-new').addEventListener('click', newMachine);
-    $('btn-demo').addEventListener('click', function () { loadMachine(FSM.demoMachine(), true); });
     $('btn-zoom-in').addEventListener('click', function () { EDITOR.zoomBy(1.25); });
     $('btn-zoom-out').addEventListener('click', function () { EDITOR.zoomBy(1 / 1.25); });
     $('btn-zoom-fit').addEventListener('click', function () { EDITOR.fit(); });
 
     var modeButtons = {
-      select: $('mode-select'),
       addState: $('mode-state'),
       addTransition: $('mode-transition')
     };
@@ -655,7 +585,7 @@
         try {
           loadMachine(FSM.deserialize(String(rd.result)), true);
         } catch (e) {
-          alert('No se pudo leer el archivo: ' + (e && e.message ? e.message : e));
+          alert(I18N.t('error.readFile', { msg: e && e.message ? e.message : e }));
         }
       };
       rd.readAsText(f);
@@ -672,7 +602,7 @@
           var m = VIMPORT.parseModule(String(rd.result));
           loadMachine(m, true);
         } catch (e) {
-          alert('No se pudo importar el Verilog: ' + (e && e.message ? e.message : e));
+          alert(I18N.t('error.importV', { msg: e && e.message ? e.message : e }));
         }
       };
       rd.readAsText(f);
@@ -681,6 +611,7 @@
 
     $('btn-undo').addEventListener('click', undo);
     $('btn-redo').addEventListener('click', redo);
+    $('btn-help').addEventListener('click', openHelpDialog);
 
     $('btn-export-v').addEventListener('click', function () {
       download(safe(M().name) + '.v', VERILOG.generateModule(M()), 'text/plain');
@@ -740,25 +671,25 @@
   /* --------------------------------------------------------------------- */
   function openShortcutsDialog() {
     var groups = [
-      ['General', [
-        ['Ctrl+Z', 'Deshacer'],
-        ['Ctrl+Y  ·  Ctrl+Shift+Z', 'Rehacer'],
-        ['Ctrl+S', 'Guardar máquina de estado (.fsm)'],
-        ['Ctrl+O', 'Abrir máquina de estado (.fsm)'],
-        ['Ctrl+N', 'Máquina nueva']
+      [I18N.t('shortcuts.general'), [
+        ['Ctrl+Z', I18N.t('sc.undo')],
+        ['Ctrl+Y  ·  Ctrl+Shift+Z', I18N.t('sc.redo')],
+        ['Ctrl+S', I18N.t('menu.save')],
+        ['Ctrl+O', I18N.t('menu.load')],
+        ['Ctrl+N', I18N.t('sc.new')]
       ]],
-      ['Selección', [
-        ['Enter', 'Editar el elemento seleccionado'],
-        ['Supr  ·  Retroceso', 'Eliminar el elemento seleccionado'],
-        ['Ctrl+D', 'Duplicar el elemento seleccionado'],
-        ['Escape', 'Deseleccionar / cancelar el modo actual']
+      [I18N.t('shortcuts.selection'), [
+        ['Enter', I18N.t('sc.edit')],
+        ['Supr  ·  Retroceso', I18N.t('sc.delete')],
+        ['Ctrl+D', I18N.t('sc.duplicate')],
+        ['Escape', I18N.t('sc.escape')]
       ]],
-      ['Lienzo', [
-        ['Arrastrar un estado', 'Moverlo'],
-        ['Shift + arrastrar (o el borde del estado)', 'Crear una transición'],
-        ['Arrastrar la línea (o su punto azul)', 'Curvarla a mano'],
-        ['Rueda del ratón', 'Zoom'],
-        ['S  ·  T  ·  V', 'Modo: + Estado  ·  + Transición  ·  Seleccionar']
+      [I18N.t('shortcuts.canvas'), [
+        [I18N.t('sc.dragState'), I18N.t('sc.move')],
+        [I18N.t('sc.dragEdge'), I18N.t('sc.connect')],
+        [I18N.t('sc.dragLine'), I18N.t('sc.curve')],
+        [I18N.t('sc.wheel'), I18N.t('sc.zoom')],
+        ['S  ·  T  ·  V', I18N.t('sc.mode')]
       ]]
     ];
     var rows = [];
@@ -770,7 +701,62 @@
       });
       rows.push({ el: ul });
     });
-    modal('Atajos de teclado', rows, function () {}, {});
+    modal(I18N.t('shortcuts.title'), rows, function () {}, {});
+  }
+
+  /* --------------------------------------------------------------------- */
+  /* Ayuda: como usar el editor + Moore vs Mealy                           */
+  /* --------------------------------------------------------------------- */
+  function openHelpDialog() {
+    var rows = [];
+    rows.push({ el: h('h4', { text: I18N.t('help.tabUse') }) });
+    var ul = h('ul', { style: 'margin:0 0 4px;padding-left:18px' });
+    for (var i = 1; i <= 7; i += 1) ul.appendChild(h('li', { text: I18N.t('help.use.' + i) }));
+    rows.push({ el: ul });
+    rows.push({ el: h('h4', { text: I18N.t('help.tabMoore') }) });
+    [1, 2, 3].forEach(function (i) {
+      rows.push({ el: h('p', { style: 'margin:0 0 8px;line-height:1.5', html: I18N.t('help.moore.' + i) }) });
+    });
+    modal(I18N.t('help.title'), rows, function () {}, {});
+  }
+
+  /* --------------------------------------------------------------------- */
+  /* Submenu "Cargar ejemplo"                                              */
+  /* --------------------------------------------------------------------- */
+  function populateExamplesMenu() {
+    var panel = $('menu-examples-panel');
+    clearEl(panel);
+    FSM.EXAMPLES.forEach(function (ex) {
+      panel.appendChild(h('button', {
+        role: 'menuitem',
+        text: I18N.t('example.' + ex.id) || ex.label,
+        onclick: function () { loadMachine(ex.build(), true); }
+      }));
+    });
+  }
+
+  /* --------------------------------------------------------------------- */
+  /* Idioma                                                                */
+  /* --------------------------------------------------------------------- */
+  function applyI18n() {
+    document.documentElement.lang = I18N.getLang();
+    document.querySelectorAll('[data-i18n]').forEach(function (el) {
+      el.textContent = I18N.t(el.getAttribute('data-i18n'));
+    });
+    document.querySelectorAll('[data-i18n-title]').forEach(function (el) {
+      el.setAttribute('title', I18N.t(el.getAttribute('data-i18n-title')));
+    });
+    populateExamplesMenu();
+    if (store.m) refreshAll();
+  }
+
+  function bindLangSelector() {
+    var sel = $('lang-select');
+    sel.value = I18N.getLang();
+    sel.addEventListener('change', function () {
+      I18N.setLang(sel.value);
+      applyI18n();
+    });
   }
 
   function bindShortcuts() {
@@ -804,11 +790,10 @@
       getMachine: function () { return store.m; },
       onChange: function (info) {
         if (info && info.transient) { autosave(); return; }
-        refreshSelectionPanel();
         refreshPortsPanel();
+        refreshTransitionTable();
         refreshDerivedNow();
       },
-      onSelect: function () { refreshSelectionPanel(); },
       onEdit: openEditor
     });
 
@@ -816,6 +801,9 @@
     bindToolbar();
     bindMenus();
     bindShortcuts();
+    bindConsole();
+    bindLangSelector();
+    applyI18n();
 
     var restored = null;
     try {

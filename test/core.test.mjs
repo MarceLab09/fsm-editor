@@ -216,6 +216,33 @@ test('deserialize conserva code / radius / dcUndefined', () => {
   assert.equal(r.transitions[0].dcUndefined, true);
 });
 
+test('FSM.EXAMPLES: ids unicos y cada ejemplo valida sin errores', () => {
+  assert.ok(FSM.EXAMPLES.length >= 2, 'al menos 2 ejemplos ademas del detector');
+  const ids = FSM.EXAMPLES.map((e) => e.id);
+  assert.equal(new Set(ids).size, ids.length, 'ids de ejemplo duplicados');
+  FSM.EXAMPLES.forEach((ex) => {
+    const m = ex.build();
+    assert.deepEqual(errorsOf(m), [], ex.id + ': no deberia tener errores');
+    assert.ok(m.states.length > 0, ex.id + ': deberia tener estados');
+  });
+});
+
+test('semaforo: 3 estados en ciclo, una salida Moore por estado', () => {
+  const m = FSM.trafficLightMachine();
+  assert.equal(m.states.length, 3);
+  m.states.forEach((s) => assert.equal(Object.keys(s.outputs).length, 1));
+  assert.deepEqual(errorsOf(m), []);
+});
+
+test('puerta con clave: Mealy, el pulso de apertura no es un valor fijo de estado', () => {
+  const m = FSM.keypadLockMachine();
+  m.states.forEach((s) => assert.equal(Object.keys(s.outputs).length, 0, 'sin salidas Moore: es puramente Mealy'));
+  const withOutput = m.transitions.filter((t) => Object.keys(t.outputs).length > 0);
+  assert.equal(withOutput.length, 1);
+  assert.equal(withOutput[0].outputs.abierto, '1');
+  assert.deepEqual(errorsOf(m), []);
+});
+
 test('.ice: estructura y bloque de codigo', () => {
   const m = FSM.demoMachine();
   const ice = ICE.buildIce(m);

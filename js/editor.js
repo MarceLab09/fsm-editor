@@ -539,6 +539,9 @@
       if (d.type === 'link') {
         clear(state.layerTemp);
         highlightHover(null);
+        // sin boton "Seleccionar": el modo "+ Transicion" es temporal, vuelve
+        // solo al soltar (haya o no conectado con otro estado)
+        if (state.mode === 'addTransition') setMode('select');
         var hov = nodeElFromPoint(evt);
         if (hov) {
           var toId = hov.getAttribute('data-id');

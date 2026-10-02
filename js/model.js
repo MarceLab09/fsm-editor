@@ -462,6 +462,63 @@
     return m;
   }
 
+  /* ----------------------------------------------------------------------- */
+  /* Ejemplo: semaforo (Moore, 3 estados en ciclo)                           */
+  /* ----------------------------------------------------------------------- */
+
+  function trafficLightMachine() {
+    var m = createMachine();
+    m.name = 'semaforo';
+    createPort(m, 'input', 'tick');
+    ['rojo', 'amarillo', 'verde'].forEach(function (name) {
+      var p = createPort(m, 'output', name);
+      p.def = '0';
+    });
+
+    var rojo = createState(m, 300, 180, 'ROJO');
+    var verde = createState(m, 560, 340, 'VERDE');
+    var amarillo = createState(m, 300, 500, 'AMARILLO');
+    m.initial = rojo.id;
+    rojo.outputs.rojo = '1';
+    verde.outputs.verde = '1';
+    amarillo.outputs.amarillo = '1';
+
+    createTransition(m, rojo.id, verde.id, 'tick');
+    createTransition(m, verde.id, amarillo.id, 'tick');
+    createTransition(m, amarillo.id, rojo.id, 'tick');
+    return m;
+  }
+
+  /* ----------------------------------------------------------------------- */
+  /* Ejemplo: puerta con clave "1,0" (Mealy: el pulso de apertura dura       */
+  /* un ciclo, no se queda encendido como en el detector Moore)              */
+  /* ----------------------------------------------------------------------- */
+
+  function keypadLockMachine() {
+    var m = createMachine();
+    m.name = 'puerta_clave';
+    createPort(m, 'input', 'b');
+    var abierto = createPort(m, 'output', 'abierto');
+    abierto.def = '0';
+
+    var espera = createState(m, 260, 300, 'ESPERA');
+    var parcial = createState(m, 560, 300, 'PARCIAL');
+    m.initial = espera.id;
+
+    createTransition(m, espera.id, parcial.id, 'b');
+    createTransition(m, espera.id, espera.id, '');
+    var ok = createTransition(m, parcial.id, espera.id, '!b');
+    ok.outputs.abierto = '1';
+    createTransition(m, parcial.id, espera.id, '');
+    return m;
+  }
+
+  var EXAMPLES = [
+    { id: 'detector101', label: 'Detector de secuencia (101)', build: demoMachine },
+    { id: 'semaforo', label: 'Semáforo', build: trafficLightMachine },
+    { id: 'puertaClave', label: 'Puerta con clave (Mealy)', build: keypadLockMachine }
+  ];
+
   global.FSM = {
     uid: uid,
     KEYWORD_SET: KEYWORD_SET,
@@ -486,6 +543,9 @@
     validate: validate,
     serialize: serialize,
     deserialize: deserialize,
-    demoMachine: demoMachine
+    demoMachine: demoMachine,
+    trafficLightMachine: trafficLightMachine,
+    keypadLockMachine: keypadLockMachine,
+    EXAMPLES: EXAMPLES
   };
 }(window));

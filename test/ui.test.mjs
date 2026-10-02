@@ -82,11 +82,13 @@ test('no existe la exportacion de coleccion; si el resto', async () => {
   await page.close();
 });
 
-test('la barra ya no tiene "Editar...", "Ajustar vista" ni "Atajos"; el widget flotante de zoom funciona', async () => {
+test('la barra ya no tiene "Editar...", "Ajustar vista", "Atajos" ni "Seleccionar"; el widget flotante de zoom funciona', async () => {
   const { page, errors } = await openEditor();
   assert.equal(await page.locator('#btn-edit').count(), 0);
   assert.equal(await page.locator('#btn-fit').count(), 0);
   assert.equal(await page.locator('#btn-shortcuts').count(), 0);
+  assert.equal(await page.locator('#mode-select').count(), 0);
+  assert.equal(await page.locator('#selection-panel').count(), 0);
   assert.equal(await page.locator('#nav-widget').count(), 1);
 
   const k0 = await page.evaluate(() => document.getElementById('viewport').getAttribute('transform'));
@@ -145,11 +147,13 @@ test('doble clic y tecla Enter abren el dialogo del elemento seleccionado', asyn
 });
 
 
-test('menus "Archivo" y "Exportar": ocultos por defecto, se abren/cierran y ejecutan su accion', async () => {
+test('menu "Archivo" (con Exportar y Cargar ejemplo dentro): oculto por defecto, se abre/cierra y ejecuta su accion', async () => {
   const { page, errors } = await openEditor();
 
   assert.equal(await page.locator('#menu-file-panel').isHidden(), true);
-  assert.equal(await page.locator('#menu-export-panel').isHidden(), true);
+  // Exportar ya no es un menu propio: sus botones viven dentro de Archivo
+  assert.equal(await page.locator('#menu-export-btn').count(), 0);
+  assert.equal(await page.locator('#menu-file-panel #btn-export-v').count(), 1);
 
   // abrir y cerrar con clic fuera
   await page.click('#menu-file-btn');
@@ -157,30 +161,33 @@ test('menus "Archivo" y "Exportar": ocultos por defecto, se abren/cierran y ejec
   await page.click('#canvas', { position: { x: 5, y: 5 } });
   assert.equal(await page.locator('#menu-file-panel').isHidden(), true);
 
-  // abrir "Archivo" y cargar el ejemplo -> carga Y cierra el menu
+  // abrir "Archivo" -> submenu "Cargar ejemplo" -> elegir uno carga Y cierra todo
   await page.click('#menu-file-btn');
-  await page.click('#btn-demo');
-  await page.waitForFunction(() => document.querySelectorAll('#canvas .layer-nodes .state').length === 4);
-  assert.equal(await page.locator('#menu-file-panel').isHidden(), true, 'el menu deberia cerrarse tras elegir una accion');
+  await page.click('#menu-examples-btn');
+  assert.equal(await page.locator('#menu-examples-panel').isHidden(), false);
+  assert.ok(await page.locator('#menu-examples-panel button').count() >= 2, 'al menos 2 ejemplos');
+  await page.locator('#menu-examples-panel button').first().click();
+  await page.waitForFunction(() => document.querySelectorAll('#canvas .layer-nodes .state').length > 0);
+  assert.equal(await page.locator('#menu-file-panel').isHidden(), true, 'el menu deberia cerrarse tras elegir un ejemplo');
 
   // Escape tambien cierra
-  await page.click('#menu-export-btn');
-  assert.equal(await page.locator('#menu-export-panel').isHidden(), false);
+  await page.click('#menu-file-btn');
+  assert.equal(await page.locator('#menu-file-panel').isHidden(), false);
   await page.keyboard.press('Escape');
-  assert.equal(await page.locator('#menu-export-panel').isHidden(), true);
+  assert.equal(await page.locator('#menu-file-panel').isHidden(), true);
 
   assert.deepEqual(errors, []);
   await page.close();
 });
 
-test('exportar/guardar desde los menus descargan con el nombre y extension correctos', async () => {
+test('exportar/guardar desde el menu Archivo descargan con el nombre y extension correctos', async () => {
   const { page } = await openEditor();
 
-  await page.click('#menu-export-btn');
+  await page.click('#menu-file-btn');
   const [dl1] = await Promise.all([page.waitForEvent('download'), page.click('#btn-export-v')]);
   assert.match(dl1.suggestedFilename(), /^detector_101\.v$/);
 
-  await page.click('#menu-export-btn');
+  await page.click('#menu-file-btn');
   const [dl2] = await Promise.all([page.waitForEvent('download'), page.click('#btn-export-ice')]);
   assert.match(dl2.suggestedFilename(), /^detector_101\.ice$/);
 
@@ -378,8 +385,14 @@ test('[curvas] arrastrar la propia linea la curva y la fija a mano; la fisica ya
   await page.waitForTimeout(700);
   assert.equal(Math.round((await storedTr(page, 0)).curve), Math.round(pinned.curve));
 
-  // el panel ofrece volver a automatica
-  await page.getByText('Volver a curvatura automática').click();
+  // el dialogo de la transicion ofrece volver a automatica (campo de curvatura vacio);
+  // se vuelve a muestrear el trazado actual en vez de reusar el punto de la suelta,
+  // porque la fisica de las demas transiciones puede seguir reacomodandose un rato
+  const fixed = await edgePoint(page, 0, 0.5);
+  await page.mouse.dblclick(fixed.x, fixed.y);
+  await page.waitForSelector('.modal-overlay');
+  await page.fill('.modal-card .dlg-curve', '');
+  await acceptModal(page);
   await page.waitForFunction(() => JSON.parse(localStorage.getItem('fsm-editor:autosave')).transitions[0].auto === true);
   assert.deepEqual(errors, []);
   await page.close();
@@ -553,13 +566,13 @@ test('anadir una entrada y usarla en una condicion', async () => {
   await lastName.fill('go');
   await lastName.press('Tab');
 
-  // selecciona la primera transicion (clic sobre su trazado) y le pone una condicion
+  // doble clic sobre la primera transicion y le pone una condicion en el dialogo
   const ep = await edgePoint(page, 0);
-  await page.mouse.click(ep.x, ep.y);
-  await page.waitForSelector('#selection-panel h3');
-  const cond = page.locator('#selection-panel input:not([type=range])').first();
-  await cond.fill('go && !x');
-  await cond.press('Tab');
+  await page.mouse.dblclick(ep.x, ep.y);
+  await page.waitForSelector('.modal-overlay');
+  await page.fill('.modal-card .dlg-cond', 'go && !x');
+  await acceptModal(page);
+  await page.waitForSelector('.modal-overlay', { state: 'detached' });
 
   await page.getByText('Salida', { exact: true }).click();
   await page.waitForFunction(() => document.querySelector('#code-out').textContent.includes('go && !x'));
@@ -685,6 +698,100 @@ test('Importar el "Cuerpo .v" (sin module) da un error explicativo, no una panta
   await page.locator('#file-input-v').setInputFiles({ name: 'cuerpo.v', mimeType: 'text/plain', buffer: Buffer.from(body, 'utf8') });
   await page.waitForTimeout(200);
   assert.equal(await nodeCount(page), 4, 'el diagrama original no se toco tras el error');
+  assert.deepEqual(errors, []);
+  await page.close();
+});
+
+/* ---- consola inferior, tabla de transicion, panel de propiedades, idioma, ayuda --- */
+
+test('consola de problemas: colapsada por defecto, sin panel lateral de validacion, se expande/colapsa', async () => {
+  const { page, errors } = await openEditor();
+  assert.equal(await page.locator('#problems').count(), 0, 'el panel lateral de validacion ya no existe');
+  assert.equal(await page.locator('#console-bar').count(), 1);
+  assert.equal(await page.locator('#console-bar.collapsed').count(), 1, 'colapsada por defecto');
+  assert.match(await page.locator('#console-badge').textContent(), /sin problemas/);
+
+  await page.click('#console-head');
+  assert.equal(await page.locator('#console-bar.collapsed').count(), 0, 'se expande al hacer clic');
+  assert.match(await page.locator('#console-list li.ok').textContent(), /correcto/);
+
+  await page.click('#console-head');
+  assert.equal(await page.locator('#console-bar.collapsed').count(), 1, 'se vuelve a colapsar');
+
+  // anadir un estado inalcanzable genera un aviso visible en la consola
+  await page.click('#mode-state');
+  const c = await page.locator('#canvas').boundingBox();
+  await page.mouse.click(c.x + 400, c.y + 40);
+  await page.waitForSelector('.modal-overlay');
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => !document.getElementById('console-badge').textContent.includes('sin problemas'));
+  assert.deepEqual(errors, []);
+  await page.close();
+});
+
+test('tabla de transicion de estados: refleja estados, condiciones, siguiente y salidas', async () => {
+  const { page, errors } = await openEditor();
+  const table = page.locator('#transition-table table');
+  await page.waitForSelector('#transition-table table');
+  const rowCount = await table.locator('tbody tr').count();
+  assert.equal(rowCount, 8, 'una fila por transicion del ejemplo');
+  const text = await table.textContent();
+  assert.match(text, /S0/);
+  assert.match(text, /S101/);
+  assert.match(text, /y=1/, 'la salida Moore de S101 aparece en su celda de estado');
+  assert.deepEqual(errors, []);
+  await page.close();
+});
+
+test('panel Modulo: ya no dice "(recomendado para iCE40)" junto a reset sincrono', async () => {
+  const { page } = await openEditor();
+  const text = await page.locator('#panel-props .block').first().textContent();
+  assert.doesNotMatch(text, /recomendado para iCE40/);
+  assert.match(text, /[Rr]eset s[ií]ncrono/);
+  await page.close();
+});
+
+test('selector de idioma: cambiar a EN traduce la barra y el panel; guarda la preferencia', async () => {
+  const { page, errors } = await openEditor();
+  assert.match(await page.locator('#menu-file-btn').textContent(), /Archivo/);
+  await page.selectOption('#lang-select', 'en');
+  await page.waitForFunction(() => document.getElementById('menu-file-btn').textContent.includes('File'));
+  assert.match(await page.locator('[data-i18n="inputs.title"]').textContent(), /Inputs/);
+  assert.match(await page.locator('[data-i18n="table.title"]').textContent(), /transition table/i);
+
+  // la preferencia queda guardada (nota: el helper openEditor limpia localStorage en
+  // cada navegacion, asi que la persistencia real tras F5 se verifica aqui leyendo
+  // la clave directamente en vez de recargar la pagina)
+  assert.equal(await page.evaluate(() => localStorage.getItem('fsm-editor:lang')), 'en');
+  assert.deepEqual(errors, []);
+  await page.close();
+});
+
+test('boton Ayuda: abre un dialogo con Moore vs Mealy y como usarlo', async () => {
+  const { page, errors } = await openEditor();
+  await page.click('#btn-help');
+  await page.waitForSelector('.modal-overlay');
+  const body = await page.locator('.modal-body').textContent();
+  assert.match(body, /Moore/);
+  assert.match(body, /Mealy/);
+  assert.match(body, /Cómo usarlo|How to use it/);
+  await dismissModal(page);
+  assert.deepEqual(errors, []);
+  await page.close();
+});
+
+test('Cargar ejemplo: lista al menos 3 ejemplos y el "Semáforo" carga 3 estados', async () => {
+  const { page, errors } = await openEditor();
+  await page.click('#menu-file-btn');
+  await page.click('#menu-examples-btn');
+  const items = page.locator('#menu-examples-panel button');
+  assert.ok(await items.count() >= 3);
+  const labels = await items.allTextContents();
+  const semaforo = labels.findIndex((t) => /sem[aá]foro/i.test(t));
+  assert.ok(semaforo >= 0, 'el semaforo esta en la lista: ' + JSON.stringify(labels));
+  await items.nth(semaforo).click();
+  await page.waitForFunction(() => document.querySelectorAll('#canvas .layer-nodes .state').length === 3);
+  assert.equal(await nodeCount(page), 3);
   assert.deepEqual(errors, []);
   await page.close();
 });
