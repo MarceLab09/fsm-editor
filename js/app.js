@@ -264,15 +264,8 @@
     var wrap = $('selection-panel');
     clearEl(wrap);
 
-    var editBtn = $('btn-edit');
-    if (editBtn) {
-      editBtn.disabled = !sel;
-      editBtn.textContent = sel && sel.kind === 'transition' ? 'Editar transición…' : 'Editar estado…';
-      if (!sel) editBtn.textContent = 'Editar…';
-    }
-
     if (!sel) {
-      wrap.appendChild(h('p', { class: 'muted', text: 'Selecciona un estado o una transicion en el lienzo (luego «Editar…», Enter o doble clic).' }));
+      wrap.appendChild(h('p', { class: 'muted', text: 'Selecciona un estado o una transicion en el lienzo (doble clic o Enter para editarlo).' }));
       return;
     }
 
@@ -621,8 +614,9 @@
   function bindToolbar() {
     $('btn-new').addEventListener('click', newMachine);
     $('btn-demo').addEventListener('click', function () { loadMachine(FSM.demoMachine(), true); });
-    $('btn-fit').addEventListener('click', function () { EDITOR.fit(); });
-    $('btn-edit').addEventListener('click', function () { openEditor(EDITOR.getSelection()); });
+    $('btn-zoom-in').addEventListener('click', function () { EDITOR.zoomBy(1.25); });
+    $('btn-zoom-out').addEventListener('click', function () { EDITOR.zoomBy(1 / 1.25); });
+    $('btn-zoom-fit').addEventListener('click', function () { EDITOR.fit(); });
 
     var modeButtons = {
       select: $('mode-select'),
@@ -687,7 +681,6 @@
 
     $('btn-undo').addEventListener('click', undo);
     $('btn-redo').addEventListener('click', redo);
-    $('btn-shortcuts').addEventListener('click', openShortcutsDialog);
 
     $('btn-export-v').addEventListener('click', function () {
       download(safe(M().name) + '.v', VERILOG.generateModule(M()), 'text/plain');

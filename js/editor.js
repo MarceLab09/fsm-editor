@@ -78,6 +78,22 @@
     state.viewport.setAttribute('transform', 'translate(' + v.tx + ',' + v.ty + ') scale(' + v.k + ')');
   }
 
+  /* Zoom manteniendo fijo el punto (px,py) en coordenadas de pantalla
+     (el que esta bajo el cursor en la rueda, o el centro del lienzo en los
+     botones +/- del widget de navegacion). */
+  function zoomAt(px, py, factor) {
+    var v = state.view;
+    var nk = Math.max(0.2, Math.min(3, v.k * factor));
+    v.tx = px - (px - v.tx) * (nk / v.k);
+    v.ty = py - (py - v.ty) * (nk / v.k);
+    v.k = nk;
+    applyView();
+  }
+  function zoomBy(factor) {
+    var r = state.svg.getBoundingClientRect();
+    zoomAt(r.width / 2, r.height / 2, factor);
+  }
+
   /* --------------------------------------------------------------------- */
   /* Inicializacion                                                        */
   /* --------------------------------------------------------------------- */
@@ -552,15 +568,7 @@
     svg.addEventListener('wheel', function (evt) {
       evt.preventDefault();
       var r = state.svg.getBoundingClientRect();
-      var px = evt.clientX - r.left, py = evt.clientY - r.top;
-      var v = state.view;
-      var factor = evt.deltaY < 0 ? 1.12 : 1 / 1.12;
-      var nk = Math.max(0.2, Math.min(3, v.k * factor));
-      // mantiene el punto bajo el cursor
-      v.tx = px - (px - v.tx) * (nk / v.k);
-      v.ty = py - (py - v.ty) * (nk / v.k);
-      v.k = nk;
-      applyView();
+      zoomAt(evt.clientX - r.left, evt.clientY - r.top, evt.deltaY < 0 ? 1.12 : 1 / 1.12);
     }, { passive: false });
 
     window.addEventListener('keydown', function (evt) {
@@ -643,6 +651,7 @@
     setMode: setMode,
     getMode: getMode,
     deleteSelection: deleteSelection,
-    fit: fit
+    fit: fit,
+    zoomBy: zoomBy
   };
 }(window));

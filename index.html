@@ -6,7 +6,7 @@
   <meta http-equiv="cache-control" content="no-cache">
   <title>FSM Editor · maquina de estados → Verilog / Icestudio</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="css/style.css?v=9">
+  <link rel="stylesheet" href="css/style.css?v=10">
 </head>
 <body>
 
@@ -49,10 +49,6 @@
       <button id="mode-state">+ Estado</button>
       <button id="mode-transition">+ Transicion</button>
     </div>
-    <span class="sep"></span>
-    <button id="btn-edit" title="Editar el elemento seleccionado (tambien: doble clic o Enter)" disabled>Editar…</button>
-    <button id="btn-fit" title="Ajustar la vista a la maquina">Ajustar vista</button>
-    <button id="btn-shortcuts" title="Ver atajos de teclado">⌨ Atajos</button>
 
     <span class="spacer"></span>
   </header>
@@ -61,10 +57,15 @@
     <section id="canvas-wrap">
       <svg id="canvas" xmlns="http://www.w3.org/2000/svg"></svg>
       <div id="hint">
-        doble clic (o selecciona y pulsa Enter / botón «Editar…») = abrir el menú ·
+        doble clic (o selecciona y pulsa Enter) = abrir el menú ·
         arrastrar estado = mover · Shift + arrastrar (o borde del estado) = conectar ·
         arrastrar la línea (o el punto azul, si está seleccionada) = curvarla a mano · las demás se acomodan solas ·
-        Supr = borrar · Ctrl+Z / Ctrl+Y = deshacer / rehacer · rueda = zoom · botón «⌨ Atajos» = ver todos
+        Supr = borrar · Ctrl+Z / Ctrl+Y = deshacer / rehacer · rueda = zoom · ? = ver todos los atajos
+      </div>
+      <div id="nav-widget" title="Controles de vista">
+        <button id="btn-zoom-out" title="Alejar">−</button>
+        <button id="btn-zoom-fit" title="Ajustar vista (recentrar)">⤢</button>
+        <button id="btn-zoom-in" title="Acercar">+</button>
       </div>
     </section>
 
@@ -133,12 +134,12 @@
     </aside>
   </main>
 
-  <script src="js/model.js?v=9"></script>
-  <script src="js/verilog.js?v=9"></script>
-  <script src="js/icestudio.js?v=9"></script>
-  <script src="js/vimport.js?v=9"></script>
-  <script src="js/physics.js?v=9"></script>
-  <script src="js/editor.js?v=9"></script>
-  <script src="js/app.js?v=9"></script>
+  <script src="js/model.js?v=10"></script>
+  <script src="js/verilog.js?v=10"></script>
+  <script src="js/icestudio.js?v=10"></script>
+  <script src="js/vimport.js?v=10"></script>
+  <script src="js/physics.js?v=10"></script>
+  <script src="js/editor.js?v=10"></script>
+  <script src="js/app.js?v=10"></script>
 </body>
 </html>

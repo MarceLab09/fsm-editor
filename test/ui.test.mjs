@@ -82,6 +82,28 @@ test('no existe la exportacion de coleccion; si el resto', async () => {
   await page.close();
 });
 
+test('la barra ya no tiene "Editar...", "Ajustar vista" ni "Atajos"; el widget flotante de zoom funciona', async () => {
+  const { page, errors } = await openEditor();
+  assert.equal(await page.locator('#btn-edit').count(), 0);
+  assert.equal(await page.locator('#btn-fit').count(), 0);
+  assert.equal(await page.locator('#btn-shortcuts').count(), 0);
+  assert.equal(await page.locator('#nav-widget').count(), 1);
+
+  const k0 = await page.evaluate(() => document.getElementById('viewport').getAttribute('transform'));
+  await page.click('#btn-zoom-in');
+  const k1 = await page.evaluate(() => document.getElementById('viewport').getAttribute('transform'));
+  assert.notEqual(k1, k0, 'acercar cambia el zoom');
+  await page.click('#btn-zoom-out');
+  await page.click('#btn-zoom-out');
+  const k2 = await page.evaluate(() => document.getElementById('viewport').getAttribute('transform'));
+  assert.notEqual(k2, k1, 'alejar cambia el zoom');
+
+  await page.click('#btn-zoom-fit');
+  await page.waitForTimeout(50);
+  assert.deepEqual(errors, []);
+  await page.close();
+});
+
 test('boton "+ Estado" + clic crea un estado y abre su dialogo', async () => {
   const { page, errors } = await openEditor();
   const before = await nodeCount(page);
@@ -100,14 +122,12 @@ test('boton "+ Estado" + clic crea un estado y abre su dialogo', async () => {
   await page.close();
 });
 
-test('boton "Editar…" y tecla Enter abren el dialogo del elemento seleccionado', async () => {
+test('doble clic y tecla Enter abren el dialogo del elemento seleccionado', async () => {
   const { page, errors } = await openEditor();
-  assert.equal(await page.locator('#btn-edit').isDisabled(), true, 'deshabilitado sin seleccion');
 
-  // seleccionar un estado -> boton habilitado -> abre dialogo
-  await page.locator('#canvas .layer-nodes .state .body').first().click();
-  await page.waitForFunction(() => !document.getElementById('btn-edit').disabled);
-  await page.click('#btn-edit');
+  // doble clic sobre un estado abre el dialogo
+  const { x, y } = await centerOf(page.locator('#canvas .layer-nodes .state .body').first());
+  await page.mouse.dblclick(x, y);
   await page.waitForSelector('.modal-overlay');
   assert.match(await page.locator('.modal-title').textContent(), /Estado/);
   await dismissModal(page);
@@ -623,9 +643,10 @@ test('Ctrl+D duplica el estado seleccionado', async () => {
   await page.close();
 });
 
-test('boton "Atajos" abre un dialogo informativo con los atajos', async () => {
+test('la tecla ? abre un dialogo informativo con los atajos', async () => {
   const { page, errors } = await openEditor();
-  await page.click('#btn-shortcuts');
+  await page.locator('#canvas').focus().catch(() => {});
+  await page.keyboard.press('?');
   await page.waitForSelector('.modal-overlay');
   assert.match(await page.locator('.modal-title').textContent(), /Atajos/);
   assert.match(await page.locator('.modal-body').textContent(), /Ctrl\+Z/);

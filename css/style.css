@@ -88,6 +88,26 @@ main { flex: 1; display: flex; min-height: 0; }
   pointer-events: none;
 }
 
+/* ---------- widget flotante de navegacion (zoom / recentrar) ---------- */
+#nav-widget {
+  position: absolute; right: 12px; bottom: 10px;
+  display: flex; gap: 2px;
+  background: rgba(17,21,28,.55);
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 8px;
+  padding: 3px;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+#nav-widget button {
+  width: 30px; height: 30px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px; line-height: 1;
+  background: transparent; border: 1px solid transparent; border-radius: 6px;
+  color: var(--text);
+}
+#nav-widget button:hover { background: rgba(255,255,255,.1); border-color: rgba(255,255,255,.18); }
+
 /* ---------- inspector ---------- */
 #inspector {
   width: 340px; flex-shrink: 0;
