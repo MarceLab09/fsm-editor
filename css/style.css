@@ -215,10 +215,10 @@ p.muted { margin: 4px 0; }
 .code-head { display: flex; gap: 6px; align-items: center; margin-bottom: 8px; }
 .code-head select { flex: 1; }
 #code-out {
-  margin: 0; white-space: pre; overflow: auto;
+  margin: 0; white-space: pre-wrap; word-break: break-word;
   background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
   padding: 10px; font: 12px/1.5 "Cascadia Code", "Consolas", ui-monospace, monospace;
-  color: #cfe3f5; max-height: calc(100vh - 160px);
+  color: #cfe3f5;
 }
 
 /* ---------- SVG ---------- */
