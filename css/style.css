@@ -134,6 +134,14 @@ main { flex: 1; display: flex; min-height: 0; }
 .tab-panel { display: none; overflow: auto; padding: 12px; flex: 1; }
 .tab-panel.active { display: block; }
 
+/* "Salida" se divide en dos zonas fijas: el codigo arriba (con su propio
+   scroll) y la tabla de transicion siempre visible abajo, sin tener que
+   desplazar el panel entero para llegar a ella. */
+#panel-code.active { display: flex; flex-direction: column; overflow: hidden; }
+#panel-code .code-head { flex-shrink: 0; }
+#panel-code #code-out { flex: 1; min-height: 80px; overflow: auto; }
+#panel-code .block { flex-shrink: 0; max-height: 36%; overflow: auto; margin: 12px 0 0; }
+
 .block { border: 1px solid var(--line); border-radius: 8px; padding: 10px; margin-bottom: 12px; background: var(--panel-2); }
 .block > h3 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); }
 h4 { margin: 12px 0 6px; font-size: 12px; color: var(--muted); }
