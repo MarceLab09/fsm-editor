@@ -19,8 +19,10 @@ async function launch() {
   } catch (e) {
     const fs = await import('node:fs');
     const exe = EDGE_PATHS.find((p) => fs.existsSync(p));
-    if (!exe) throw e;
-    return await chromium.launch({ executablePath: exe });
+    if (exe) return await chromium.launch({ executablePath: exe });
+    // ni canal msedge ni Edge instalado (p.ej. runners de CI en Linux):
+    // usa el Chromium que trae Playwright
+    return await chromium.launch();
   }
 }
 

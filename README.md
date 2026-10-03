@@ -264,3 +264,19 @@ npm run serve        # sirve la carpeta en http://localhost:8080
   arrastrar el tirador de curvatura, y que la pestaña *Salida* refleja el modelo.
 
 Requisitos: Node.js ≥ 20 y Microsoft Edge instalado.
+
+## CI/CD
+
+`.github/workflows/ci.yml` corre en GitHub Actions:
+
+- **En cada push/PR a `main`**: instala dependencias, el Chromium de Playwright
+  y ejecuta `npm test` (core + UI) en Linux — valida que la app funcione sin
+  depender de tener Microsoft Edge instalado (ver `test/ui.test.mjs`, que si
+  no encuentra Edge cae automáticamente al Chromium de Playwright).
+- **Al etiquetar una versión (`vX.Y.Z`)**: si las pruebas pasan, empaqueta
+  `index.html`, `css/`, `js/` y `README.md` en un único `.zip` y publica una
+  *release* de GitHub con ese artefacto adjunto. Al ser una app web estática
+  sin paso de compilación, el mismo `.zip` corre igual en Windows, macOS y
+  Linux (solo hace falta abrir `index.html` en un navegador) — la
+  «generación multiplataforma» es el propio contenido, no un build por
+  sistema operativo.

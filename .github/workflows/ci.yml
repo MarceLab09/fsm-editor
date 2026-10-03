@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Pruebas (core + UI)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Instalar el Chromium de Playwright
+        run: npx playwright install --with-deps chromium
+
+      - name: Ejecutar la suite completa
+        run: npm test
+
+  release:
+    name: Empaquetar y publicar artefacto
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      # El editor es una app web estatica sin paso de compilacion: el mismo
+      # .zip corre igual en Windows/macOS/Linux (solo hace falta un navegador),
+      # asi que "multiplataforma" aqui es el propio contenido, no un build por SO.
+      - name: Empaquetar el editor
+        run: |
+          mkdir -p dist/fsm-editor
+          cp -r index.html css js README.md dist/fsm-editor/
+          cd dist
+          zip -r "fsm-editor-${GITHUB_REF_NAME}.zip" fsm-editor
+
+      - name: Publicar release de GitHub con el artefacto
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/fsm-editor-*.zip
+          generate_release_notes: true
