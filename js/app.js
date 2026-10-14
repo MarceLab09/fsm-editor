@@ -93,6 +93,10 @@
   /* Descargas                                                             */
   /* --------------------------------------------------------------------- */
   function download(filename, content, mime) {
+    /* Dentro de Icestudio el guardado pasa por el dialogo nativo; fuera,
+       PLUGIN.saveFile devuelve false y seguimos con la descarga normal. */
+    if (window.PLUGIN && window.PLUGIN.saveFile(filename, content)) return;
+
     var blob = content instanceof Uint8Array
       ? new Blob([content], { type: mime || 'application/octet-stream' })
       : new Blob([content], { type: (mime || 'text/plain') + ';charset=utf-8' });

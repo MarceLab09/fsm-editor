@@ -17,8 +17,14 @@ cual.
 - JavaScript "clásico": `<script>` normales (no `type="module"`), IIFE con
   `(function (global) { ... }(window))`, cada archivo expone un único
   objeto global (`FSM`, `VERILOG`, `ICE`, `VIMPORT`, `PHYS`, `EDITOR`,
-  `I18N`). No se añaden dependencias de runtime; Playwright es la única
+  `I18N`, `PLUGIN`). No se añaden dependencias de runtime; Playwright es la única
   dependencia y es solo de desarrollo (pruebas).
+- El repo es, además, un **plugin externo de Icestudio**: `manifest.json` +
+  `icon.svg` en la raíz. La carpeta instalada debe llamarse igual que el `id`
+  del manifiesto (`fsm-editor`), porque Icestudio abre
+  `<plugins>/<id>/index.html`. Todo lo específico del plugin vive en
+  `js/plugin.js` y queda inerte fuera de Icestudio: nada puede romper el modo
+  `file://`.
 - Sin paso de build: cualquier cambio debe poder probarse abriendo
   `index.html` directamente.
 - Cache-busting manual: los `<script src="js/x.js?v=N">` de `index.html`

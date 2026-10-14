@@ -225,9 +225,50 @@ Limitaciones a tener en cuenta:
 - Las salidas son **combinacionales** (Moore/Mealy puro). Si necesitas salidas
   registradas, añádeles un registro en Icestudio.
 
+## Plugin de Icestudio
+
+El editor también se instala como **plugin externo** de Icestudio, sin dejar de
+funcionar con doble clic: es la misma carpeta.
+
+1. En Icestudio, **Preferences > Advanced > External plugins**, elige una
+   carpeta de plugins.
+2. Copia dentro el repo completo, en una carpeta llamada **`fsm-editor`** (el
+   nombre tiene que coincidir con el `id` de `manifest.json`: Icestudio abre
+   `<plugins>/<id>/index.html`).
+3. Reinicia Icestudio. FSM Editor aparece en la lista de plugins.
+
+No hace falta recompilar Icestudio ni tocar su instalación, y cualquier cambio
+en el editor se recoge con solo reiniciar.
+
+```
+fsm-editor/
+├── manifest.json   id, nombre, versión, icono y tamaño de la ventana
+├── icon.svg
+├── index.html      lo que abre Icestudio (nw.Window.open)
+├── css/
+└── js/
+```
+
+Icestudio abre `index.html` en una ventana NW.js propia y, cuando termina de
+cargar, le inyecta su API: deja `window.opener` apuntando a la ventana
+principal, publica `window.iceStudio.bus` e invoca `onIcestudioPluginLoaded()`.
+`js/plugin.js` envuelve todo eso en el objeto global `PLUGIN`:
+
+| | |
+|---|---|
+| `PLUGIN.active()` | si estamos dentro de Icestudio |
+| `PLUGIN.ready(cb)` | ejecuta `cb` cuando la API del host está lista |
+| `PLUGIN.bus()` | bus de eventos de Icestudio, o `null` |
+| `PLUGIN.saveFile(nombre, contenido)` | guarda con el diálogo nativo; `false` si no puede |
+
+Fuera de Icestudio el módulo queda **inerte** y las exportaciones vuelven a la
+descarga normal del navegador, así que el modo `file://` no cambia.
+
 ## Estructura
 
 ```
+manifest.json      metadatos del plugin de Icestudio
+icon.svg           icono del plugin
 index.html
 css/style.css
 js/i18n.js         diccionario ES/EN de la interfaz (global I18N)
@@ -237,6 +278,7 @@ js/icestudio.js    generador de archivo .ice (global ICE)
 js/vimport.js      importador: reconstruye el modelo a partir de un .v (global VIMPORT)
 js/physics.js      curvas a lo Digital: arco, física de los puntos guía, deshacer cruces (global PHYS)
 js/editor.js       lienzo SVG: dibujar, mover, pan/zoom, seleccionar (global EDITOR)
+js/plugin.js       integracion con Icestudio como plugin externo (global PLUGIN)
 js/app.js          barra de herramientas, inspector, consola, tabla, deshacer/rehacer, idioma, ayuda
 test/              pruebas (core en Node + UI con Playwright)
 ```
