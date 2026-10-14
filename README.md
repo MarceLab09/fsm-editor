@@ -232,9 +232,9 @@ funcionar con doble clic: es la misma carpeta.
 
 1. En Icestudio, **Preferences > Advanced > External plugins**, elige una
    carpeta de plugins.
-2. Copia dentro el repo completo, en una carpeta llamada **`fsm-editor`** (el
-   nombre tiene que coincidir con el `id` de `manifest.json`: Icestudio abre
-   `<plugins>/<id>/index.html`).
+2. Copia dentro el repo completo, en su propia subcarpeta (por convención,
+   `fsm-editor`). Icestudio abre el `index.html` de cada subcarpeta directa;
+   el nombre de la carpeta es libre y no tiene que coincidir con el `id`.
 3. Reinicia Icestudio. FSM Editor aparece en la lista de plugins.
 
 No hace falta recompilar Icestudio ni tocar su instalación, y cualquier cambio
