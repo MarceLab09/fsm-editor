@@ -92,6 +92,12 @@
     }
     var initName = (machine.initial && idToName[machine.initial]) || (states[0] && states[0].name) || REG;
 
+    /* Codigos de estado realmente usados. Si cubren las 2^W combinaciones, la
+       rama `default` del case es inalcanzable y solo ensucia el codigo. */
+    var usedCodes = {};
+    states.forEach(function (s, i) { usedCodes[codeOf(s, i)] = true; });
+    var coversAllCodes = Object.keys(usedCodes).length >= Math.pow(2, W);
+
     /* --- salidas: en bodyOnly no se puede `output reg`, se usa reg + assign --- */
     var outRegName = {};
     machine.outputs.forEach(function (p) {
@@ -178,30 +184,32 @@
       emitTransitionChain(outs, i0 + 3);
       line(indent(i0 + 2) + 'end');
     });
-    line(indent(i0 + 2) + 'default: ' + NXT + ' = ' + initName + ';');
+    if (!coversAllCodes) line(indent(i0 + 2) + 'default: ' + NXT + ' = ' + initName + ';');
     line(indent(i0 + 1) + 'endcase');
     line(indent(i0) + 'end');
     line('');
 
     function emitTransitionChain(outs, lvl) {
       if (outs.length === 0) return;
-      var emittedElse = false;
+      var seen = [];   // condiciones ya emitidas en esta cadena
       var stopped = false;
-      outs.forEach(function (t, idx) {
+      outs.forEach(function (t) {
         if (stopped) return;
         var cond = String(t.cond).trim();
         var target = idToName[t.to];
         if (cond === '') {
-          if (idx === 0) {
+          /* Una transicion sin condicion es "lo que queda". Se emite como la
+             negacion explicita de las anteriores y no como un `else` pelado:
+             el `else` pertenece a la sentencia, no al diagrama de estados. */
+          if (seen.length === 0) {
             line(indent(lvl) + NXT + ' = ' + target + ';');
           } else {
-            line(indent(lvl) + 'else ' + NXT + ' = ' + target + ';');
+            line(indent(lvl) + 'else if (' + complementOf(seen) + ') ' + NXT + ' = ' + target + ';');
           }
           stopped = true; // lo que venga despues es codigo muerto
         } else {
-          var kw = emittedElse ? 'else if' : 'if';
-          line(indent(lvl) + kw + ' (' + cond + ') ' + NXT + ' = ' + target + ';');
-          emittedElse = true;
+          line(indent(lvl) + (seen.length ? 'else if' : 'if') + ' (' + cond + ') ' + NXT + ' = ' + target + ';');
+          seen.push(cond);
         }
       });
     }
@@ -213,14 +221,20 @@
       machine.outputs.forEach(function (p) {
         line(indent(i0 + 1) + outRegName[p.name] + ' = ' + formatValue(p.def, p.width) + ';');
       });
-      line(indent(i0 + 1) + 'case (' + REG + ')');
-      states.forEach(function (s) {
-        var mooreKeys = Object.keys(s.outputs || {});
-        var allTs = FSM.outgoing(machine, s.id);
-        var mealyTs = allTs.filter(function (t) {
+      function mealyOf(s) {
+        return FSM.outgoing(machine, s.id).filter(function (t) {
           return (t.outputs && Object.keys(t.outputs).length > 0) || t.dcUndefined;
         });
-        if (mooreKeys.length === 0 && mealyTs.length === 0 && !s.dcUndefined) return;
+      }
+      /* Solo los estados que de verdad asignan algo entran en el case. */
+      var outStates = states.filter(function (s) {
+        return Object.keys(s.outputs || {}).length > 0 || mealyOf(s).length > 0 || s.dcUndefined;
+      });
+
+      line(indent(i0 + 1) + 'case (' + REG + ')');
+      outStates.forEach(function (s) {
+        var mooreKeys = Object.keys(s.outputs || {});
+        var mealyTs = mealyOf(s);
         line(indent(i0 + 2) + s.name + ': begin');
         // "valores no definidos a DC": las salidas no asignadas en este estado -> 'x'
         if (s.dcUndefined) {
@@ -236,7 +250,7 @@
           line(indent(i0 + 3) + outRegName[name] + ' = ' + formatValue(s.outputs[name], port.width) + ';');
         });
         // Mealy: por prioridad de transicion
-        var emittedElse = false;
+        var seenOut = [];
         mealyTs.forEach(function (t) {
           var cond = String(t.cond).trim();
           var assigns = [];
@@ -251,15 +265,21 @@
           });
           if (assigns.length === 0) return;
           if (cond === '') {
-            line(indent(i0 + 3) + (emittedElse ? 'else begin ' : 'begin ') + assigns.join(' ') + ' end');
+            if (seenOut.length === 0) {
+              line(indent(i0 + 3) + 'begin ' + assigns.join(' ') + ' end');
+            } else {
+              line(indent(i0 + 3) + 'else if (' + complementOf(seenOut) + ') begin ' + assigns.join(' ') + ' end');
+            }
           } else {
-            line(indent(i0 + 3) + (emittedElse ? 'else if' : 'if') + ' (' + cond + ') begin ' + assigns.join(' ') + ' end');
-            emittedElse = true;
+            line(indent(i0 + 3) + (seenOut.length ? 'else if' : 'if') + ' (' + cond + ') begin ' + assigns.join(' ') + ' end');
+            seenOut.push(cond);
           }
         });
         line(indent(i0 + 2) + 'end');
       });
-      line(indent(i0 + 2) + 'default: ;');
+      /* Aqui no hace falta `default`: cada salida ya recibio su valor por
+         defecto antes del case, asi que no hay riesgo de latch ni rama que
+         anadir. Un `default: ;` seria una linea vacia y nada mas. */
       line(indent(i0 + 1) + 'endcase');
       line(indent(i0) + 'end');
       line('');
@@ -275,6 +295,21 @@
   /* --------------------------------------------------------------------- */
   /* Auxiliares                                                            */
   /* --------------------------------------------------------------------- */
+  /* Complemento de una condicion, en la forma mas legible posible:
+       x        -> !x
+       !x       -> x
+       a && b   -> !(a && b)                                                  */
+  function negate(cond) {
+    var c = String(cond).trim();
+    if (/^[A-Za-z_]\w*$/.test(c)) return '!' + c;
+    if (/^!\s*[A-Za-z_]\w*$/.test(c)) return c.replace(/^!\s*/, '');
+    return '!(' + c + ')';
+  }
+  /* "ninguna de estas se cumplio": !a && !b && ... */
+  function complementOf(conds) {
+    return conds.map(negate).join(' && ');
+  }
+
   function busSpec(width) { return width > 1 ? ('[' + (width - 1) + ':0] ') : ''; }
   function xValue(width) { return (width > 1 ? width : 1) + "'bx"; }
   function pad(s, n) { s = String(s); while (s.length < n) s += ' '; return s; }

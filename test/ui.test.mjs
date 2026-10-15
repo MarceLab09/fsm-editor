@@ -758,7 +758,61 @@ test('tabla de transicion de estados: vive en la pestana "Salida", refleja estad
   const text = await table.textContent();
   assert.match(text, /S0/);
   assert.match(text, /S101/);
-  assert.match(text, /y=1/, 'la salida Moore de S101 aparece en su celda de estado');
+
+  // la salida Moore va en la columna "Salidas", no en la de "Estado"
+  const fila101 = table.locator('tbody tr')
+    .filter({ has: page.locator('td.state-cell', { hasText: 'S101' }) }).first();
+  assert.doesNotMatch(await fila101.locator('td.state-cell').textContent(), /y=1/,
+    'la celda de estado solo lleva el nombre');
+  assert.match(await fila101.locator('td.out-cell').textContent(), /y=1/,
+    'la salida Moore vive en la columna de salidas');
+
+  // el ejemplo ya no tiene transiciones sin condicion: nada de "en otro caso"
+  assert.doesNotMatch(text, /en otro caso/);
+  assert.match(text, /!x/, 'las condiciones son explicitas');
+  assert.deepEqual(errors, []);
+  await page.close();
+});
+
+test('tabla: la salida Mealy se muestra junto al estado siguiente', async () => {
+  const { page, errors } = await openEditor();
+  await page.locator('#menu-file-btn').click();
+  await page.getByText('Cargar ejemplo', { exact: true }).click();
+  await page.getByText('Puerta con clave (Mealy)', { exact: true }).click();
+  await page.getByText('Salida', { exact: true }).click();
+  await page.waitForSelector('#transition-table table');
+
+  const fila = page.locator('#transition-table tbody tr').filter({ hasText: 'abierto=1' }).first();
+  const celdas = fila.locator('td');
+  // la salida Mealy cuelga del estado siguiente, en la misma celda
+  const siguiente = await fila.locator('td .next-mealy').textContent();
+  assert.match(siguiente, /abierto=1/);
+  const textoSiguiente = await celdas.nth(await celdas.count() - 2).textContent();
+  assert.match(textoSiguiente, /ESPERA, abierto=1/, 'estado siguiente y salida juntos');
+
+  // y no aparece en la columna de salidas, que es la de Moore
+  assert.doesNotMatch(await page.locator('#transition-table tbody td.out-cell').first().textContent(), /abierto/);
+  assert.deepEqual(errors, []);
+  await page.close();
+});
+
+test('el dialogo de ayuda usa la variante ancha', async () => {
+  const { page, errors } = await openEditor();
+  await page.locator('#btn-help').click();
+  const card = page.locator('.modal-card');
+  await card.waitFor();
+  assert.ok((await card.getAttribute('class')).includes('wide'), 'lleva la clase wide');
+  const ancho = await card.evaluate((el) => el.getBoundingClientRect().width);
+  assert.ok(ancho > 600, 'el dialogo de ayuda es ancho, no los 380px de los demas: ' + ancho);
+  await page.keyboard.press('Escape');
+
+  // un dialogo normal sigue siendo estrecho
+  await page.waitForSelector('.modal-overlay', { state: 'detached' });
+  await page.locator('#canvas .layer-nodes .state .body').first().dblclick();
+  const normal = page.locator('.modal-card');
+  await normal.waitFor();
+  const anchoNormal = await normal.evaluate((el) => el.getBoundingClientRect().width);
+  assert.ok(anchoNormal < 500, 'los demas dialogos no cambian: ' + anchoNormal);
   assert.deepEqual(errors, []);
   await page.close();
 });

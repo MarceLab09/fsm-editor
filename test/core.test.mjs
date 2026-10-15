@@ -41,7 +41,7 @@ test('demo -> Verilog modulo completo', () => {
   assert.match(v, /always @\(posedge clk or posedge rst\) begin/);
   assert.match(v, /if \(rst\)\s*\n\s*state <= S0;/);
   assert.match(v, /next_state = state;/);
-  assert.match(v, /S0: begin\s*\n\s*if \(x\) next_state = S1;\s*\n\s*else next_state = S0;/);
+  assert.match(v, /S0: begin\s*\n\s*if \(x\) next_state = S1;\s*\n\s*else if \(!x\) next_state = S0;/);
   assert.match(v, /y = 1'b0;/);
   assert.match(v, /S101: begin\s*\n\s*y = 1'b1;/);
 
@@ -264,4 +264,91 @@ test('.ice: estructura y bloque de codigo', () => {
   const txt = ICE.iceText(m);
   JSON.parse(txt);
   assert.doesNotMatch(txt, /: *undefined/);
+});
+
+/* ---------------------------------------------------------------------------
+ * El diagrama no tiene "else": cada transicion lleva condicion explicita y el
+ * generador emite el complemento en vez de una rama `else` pelada.
+ * ------------------------------------------------------------------------- */
+
+test('los ejemplos no dejan transiciones sin condicion', () => {
+  for (const build of [FSM.demoMachine, FSM.keypadLockMachine, FSM.trafficLightMachine]) {
+    const m = build();
+    const vacias = m.transitions.filter((t) => String(t.cond).trim() === '');
+    assert.equal(vacias.length, 0, m.name + ' tiene transiciones sin condicion');
+  }
+});
+
+test('detector 101: cada estado decide con x y !x, sin else pelado', () => {
+  const v = VERILOG.generateModule(FSM.demoMachine());
+  assert.ok(!/else next_state/.test(v), 'no debe quedar un "else next_state"');
+  assert.match(v, /S1: begin\s*\n\s*if \(!x\) next_state = S10;\s*\n\s*else if \(x\) next_state = S1;/);
+  assert.match(v, /S101: begin\s*\n\s*if \(!x\) next_state = S10;\s*\n\s*else if \(x\) next_state = S1;/);
+});
+
+test('transicion sin condicion: se emite el complemento de las anteriores', () => {
+  const m = FSM.createMachine();
+  FSM.createPort(m, 'input', 'x');
+  const a = FSM.createState(m, 0, 0, 'A');
+  const b = FSM.createState(m, 100, 0, 'B');
+  m.initial = a.id;
+  FSM.createTransition(m, a.id, b.id, 'x');
+  FSM.createTransition(m, a.id, a.id, '');          // "lo que queda"
+  const v = VERILOG.generateModule(m);
+  assert.match(v, /if \(x\) next_state = B;\s*\n\s*else if \(!x\) next_state = A;/);
+  assert.ok(!/else next_state/.test(v));
+});
+
+test('complemento de varias condiciones y de una compuesta', () => {
+  const m = FSM.createMachine();
+  FSM.createPort(m, 'input', 'a');
+  FSM.createPort(m, 'input', 'b');
+  const s = FSM.createState(m, 0, 0, 'S');
+  const t = FSM.createState(m, 100, 0, 'T');
+  m.initial = s.id;
+  FSM.createTransition(m, s.id, t.id, 'a && b');
+  FSM.createTransition(m, s.id, t.id, '!a');
+  FSM.createTransition(m, s.id, s.id, '');
+  const v = VERILOG.generateModule(m);
+  assert.match(v, /else if \(!\(a && b\) && a\) next_state = S;/);
+});
+
+/* ---------------------------------------------------------------------------
+ * El `default` solo aparece cuando de verdad hace falta.
+ * ------------------------------------------------------------------------- */
+
+test('sin default si los estados cubren todas las combinaciones del registro', () => {
+  const v = VERILOG.generateModule(FSM.demoMachine());   // 4 estados en 2 bits
+  assert.ok(!/default:/.test(v), 'no deberia haber ningun default:\n' + v);
+});
+
+test('con default si quedan codigos sin usar', () => {
+  const v = VERILOG.generateModule(FSM.trafficLightMachine()); // 3 estados en 2 bits
+  assert.match(v, /default: next_state = ROJO;/);
+});
+
+test('el case de salidas nunca lleva un "default: ;" vacio', () => {
+  for (const build of [FSM.demoMachine, FSM.keypadLockMachine, FSM.trafficLightMachine]) {
+    const v = VERILOG.generateModule(build());
+    assert.ok(!/default: ;/.test(v), build.name + ' emite un default vacio');
+  }
+});
+
+test('one-hot: siempre hace falta default (quedan codigos sin usar)', () => {
+  const m = FSM.demoMachine();
+  m.encoding = 'onehot';
+  const v = VERILOG.generateModule(m);
+  assert.match(v, /default: next_state = S0;/);
+});
+
+/* ---------------------------------------------------------------------------
+ * Puerta con clave: Mealy, la salida va en la transicion.
+ * ------------------------------------------------------------------------- */
+
+test('puerta con clave: abierto se asigna en la transicion, no en el estado', () => {
+  const m = FSM.keypadLockMachine();
+  const v = VERILOG.generateModule(m);
+  assert.match(v, /PARCIAL: begin\s*\n\s*if \(!b\) begin abierto = 1'b1; end/);
+  assert.equal(m.states.filter((s) => Object.keys(s.outputs || {}).length).length, 0,
+    'ningun estado tiene salidas: es Mealy puro');
 });

@@ -216,8 +216,10 @@ p.muted { margin: 4px 0; }
   padding: 3px 5px; border-bottom: 1px solid var(--line); vertical-align: top;
   font-family: "Cascadia Code", Consolas, ui-monospace, monospace;
 }
-.trans-table td.state-cell { font-family: inherit; }
+.trans-table td.state-cell { font-family: inherit; white-space: nowrap; }
 .trans-table .state-moore { color: var(--warn); font-size: 10px; font-family: "Cascadia Code", Consolas, ui-monospace, monospace; }
+.trans-table td.out-cell { vertical-align: middle; }
+.trans-table .next-mealy { color: var(--warn); }
 
 /* codigo */
 .code-head { display: flex; gap: 6px; align-items: center; margin-bottom: 8px; }
@@ -277,6 +279,7 @@ p.muted { margin: 4px 0; }
   border: 1px solid var(--line); border-radius: 10px;
   box-shadow: 0 18px 50px rgba(0, 0, 0, .5);
 }
+.modal-card.wide { width: 720px; }
 .modal-title {
   padding: 12px 16px; font-weight: 700; letter-spacing: .3px;
   border-bottom: 1px solid var(--line); background: var(--panel-2);

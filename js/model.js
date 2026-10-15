@@ -451,14 +451,16 @@
     m.initial = s0.id;
     s101.outputs.y = '1';
 
+    /* Cada transicion lleva su condicion explicita: el diagrama de estados no
+       tiene "else", esa es una construccion de la sentencia Verilog. */
     createTransition(m, s0.id, s1.id, 'x');
-    createTransition(m, s0.id, s0.id, '');
+    createTransition(m, s0.id, s0.id, '!x');
     createTransition(m, s1.id, s10.id, '!x');
-    createTransition(m, s1.id, s1.id, '');
+    createTransition(m, s1.id, s1.id, 'x');
     createTransition(m, s10.id, s101.id, 'x');
-    createTransition(m, s10.id, s0.id, '');
+    createTransition(m, s10.id, s0.id, '!x');
     createTransition(m, s101.id, s10.id, '!x');
-    createTransition(m, s101.id, s1.id, '');
+    createTransition(m, s101.id, s1.id, 'x');
     return m;
   }
 
@@ -506,10 +508,10 @@
     m.initial = espera.id;
 
     createTransition(m, espera.id, parcial.id, 'b');
-    createTransition(m, espera.id, espera.id, '');
+    createTransition(m, espera.id, espera.id, '!b');
     var ok = createTransition(m, parcial.id, espera.id, '!b');
     ok.outputs.abierto = '1';
-    createTransition(m, parcial.id, espera.id, '');
+    createTransition(m, parcial.id, espera.id, 'b');
     return m;
   }
 

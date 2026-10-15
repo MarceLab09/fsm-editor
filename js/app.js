@@ -239,11 +239,26 @@
   }
 
   /* ---- tabla de transicion de estados (resumen en vivo) ---- */
-  function stateCell(s, moore, rowspan) {
+  /* La columna "Estado" lleva solo el nombre. Las salidas Moore pertenecen al
+     estado, pero son salidas: van en la columna "Salidas" (misma celda para
+     todas las filas del estado). Las salidas Mealy pertenecen a la transicion
+     y se muestran junto al estado siguiente. */
+  function stateCell(s, rowspan) {
     var td = h('td', { class: 'state-cell', rowspan: rowspan || 1 });
     var isInit = M().initial === s.id;
     td.appendChild(h('div', { text: s.name + (isInit ? ' ▶' : '') }));
+    return td;
+  }
+  function mooreCell(moore, rowspan) {
+    var td = h('td', { class: 'out-cell', rowspan: rowspan || 1 });
     if (moore) td.appendChild(h('div', { class: 'state-moore', text: moore }));
+    else { td.className = 'out-cell muted'; td.textContent = '—'; }
+    return td;
+  }
+  function nextCell(to, mealy) {
+    var td = h('td');
+    td.appendChild(h('span', { text: to ? to.name : '?' }));
+    if (mealy) td.appendChild(h('span', { class: 'next-mealy', text: ', ' + mealy }));
     return td;
   }
   function refreshTransitionTable() {
@@ -267,10 +282,10 @@
       var moore = FSM.formatOutputs(s.outputs);
       if (!outs.length) {
         tbody.appendChild(h('tr', {}, [
-          stateCell(s, moore),
+          stateCell(s),
           h('td', { class: 'muted', text: '—' }),
           h('td', { class: 'muted', text: '—' }),
-          h('td', { class: 'muted', text: '—' })
+          mooreCell(moore)
         ]));
         return;
       }
@@ -278,10 +293,10 @@
         var to = FSM.getState(m, t.to);
         var cond = String(t.cond).trim();
         var row = h('tr', {}, [
-          i === 0 ? stateCell(s, moore, outs.length) : null,
-          h('td', { text: cond === '' ? 'else' : cond }),
-          h('td', { text: to ? to.name : '?' }),
-          h('td', { text: FSM.formatOutputs(t.outputs) || '—' })
+          i === 0 ? stateCell(s, outs.length) : null,
+          h('td', { text: cond === '' ? I18N.t('table.rest') : cond }),
+          nextCell(to, FSM.formatOutputs(t.outputs)),
+          i === 0 ? mooreCell(moore, outs.length) : null
         ].filter(function (c) { return c; }));
         tbody.appendChild(row);
       });
@@ -296,7 +311,7 @@
   function modal(title, rows, onAccept, opts) {
     opts = opts || {};
     var overlay = h('div', { class: 'modal-overlay' });
-    var card = h('div', { class: 'modal-card', role: 'dialog', 'aria-label': title });
+    var card = h('div', { class: 'modal-card' + (opts.wide ? ' wide' : ''), role: 'dialog', 'aria-label': title });
     card.appendChild(h('div', { class: 'modal-title', text: title }));
     var body = h('div', { class: 'modal-body' });
     rows.forEach(function (r) { body.appendChild(r.el); });
@@ -727,7 +742,7 @@
     [1, 2, 3].forEach(function (i) {
       rows.push({ el: h('p', { style: 'margin:0 0 8px;line-height:1.5', html: I18N.t('help.moore.' + i) }) });
     });
-    modal(I18N.t('help.title'), rows, function () {}, {});
+    modal(I18N.t('help.title'), rows, function () {}, { wide: true });
   }
 
   /* --------------------------------------------------------------------- */
