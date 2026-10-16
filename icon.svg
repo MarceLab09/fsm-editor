@@ -1,17 +1,17 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
   <rect width="64" height="64" rx="12" fill="#1f6feb"/>
-  <g fill="none" stroke="#ffffff" stroke-width="2.6">
-    <circle cx="21" cy="21" r="7.5"/>
-    <circle cx="46" cy="21" r="7.5"/>
-    <circle cx="33" cy="45" r="7.5"/>
-    <path d="M 28.5 21 L 34.5 21"/>
-    <path d="M 42.43 27.60 L 38.48 34.88"/>
-    <path d="M 29.65 38.29 L 26.14 31.29"/>
+  <g fill="none" stroke="#ffffff" stroke-width="2.4">
+    <circle cx="18" cy="27" r="7"/>
+    <circle cx="46" cy="21" r="7"/>
+    <circle cx="35" cy="48" r="7"/>
+    <path d="M 24.8 25.5 Q 31.3 20.6 39.2 22.5"/>
+    <path d="M 43.4 27.5 Q 43.7 35.8 37.6 41.5"/>
+    <path d="M 30.6 42.6 Q 23.8 39.7 22.4 32.4"/>
   </g>
   <g fill="#ffffff">
-    <path d="M 38.5 21 L 34.5 19.2 L 34.5 22.8 Z"/>
-    <path d="M 36.57 38.40 L 36.90 34.02 L 40.06 35.74 Z"/>
-    <path d="M 24.35 27.71 L 27.75 30.48 L 24.53 32.09 Z"/>
-    <path d="M 12.8 21 L 6.5 17.6 L 6.5 24.4 Z"/>
+    <path d="M 39.2 22.5 L 33.87 23.27 L 34.81 19.39 Z"/>
+    <path d="M 37.6 41.5 L 39.89 36.62 L 42.63 39.54 Z"/>
+    <path d="M 22.4 32.4 L 25.30 36.93 L 21.38 37.69 Z"/>
+    <path d="M 9.5 27 L 3.5 23.6 L 3.5 30.4 Z"/>
   </g>
 </svg>
