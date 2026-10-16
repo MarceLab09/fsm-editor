@@ -788,7 +788,7 @@ test('tabla: la salida Mealy se muestra junto al estado siguiente', async () => 
   const siguiente = await fila.locator('td .next-mealy').textContent();
   assert.match(siguiente, /abierto=1/);
   const textoSiguiente = await celdas.nth(await celdas.count() - 2).textContent();
-  assert.match(textoSiguiente, /ESPERA, abierto=1/, 'estado siguiente y salida juntos');
+  assert.match(textoSiguiente, /CLAVE_AB, abierto=1/, 'estado siguiente y salida juntos');
 
   // y no aparece en la columna de salidas, que es la de Moore
   assert.doesNotMatch(await page.locator('#transition-table tbody td.out-cell').first().textContent(), /abierto/);

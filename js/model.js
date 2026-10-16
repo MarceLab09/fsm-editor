@@ -492,26 +492,47 @@
   }
 
   /* ----------------------------------------------------------------------- */
-  /* Ejemplo: puerta con clave "1,0" (Mealy: el pulso de apertura dura       */
-  /* un ciclo, no se queda encendido como en el detector Moore)              */
+  /* Ejemplo: puerta con clave de dos botones (Mealy).                       */
+  /*                                                                          */
+  /* La clave es la secuencia A, B, A sobre dos pulsadores. Pensado para      */
+  /* comprobarse en una Alhambra II, que trae exactamente dos botones (SW1,   */
+  /* SW2) y ocho LED: a -> SW1, b -> SW2, abierto -> LED0.                    */
+  /*                                                                          */
+  /* La salida es Mealy de verdad: "abierto" depende del estado CLAVE_AB Y    */
+  /* de que A siga pulsado, asi que el LED permanece encendido mientras se    */
+  /* mantiene el boton. Esto es lo que la hace observable en la placa: un     */
+  /* pulso de un ciclo a 12 MHz duraria 83 ns y no se veria.                  */
+  /*                                                                          */
+  /* Pulsar los dos botones a la vez cancela el intento y vuelve a REPOSO.    */
+  /* Donde no hay transicion dibujada la maquina se queda donde esta, que es  */
+  /* lo que permite soltar los botones entre digito y digito.                 */
   /* ----------------------------------------------------------------------- */
 
   function keypadLockMachine() {
     var m = createMachine();
     m.name = 'puerta_clave';
+    createPort(m, 'input', 'a');
     createPort(m, 'input', 'b');
     var abierto = createPort(m, 'output', 'abierto');
     abierto.def = '0';
 
-    var espera = createState(m, 260, 300, 'ESPERA');
-    var parcial = createState(m, 560, 300, 'PARCIAL');
-    m.initial = espera.id;
+    var reposo = createState(m, 200, 300, 'REPOSO');
+    var claveA = createState(m, 430, 300, 'CLAVE_A');
+    var claveAB = createState(m, 660, 300, 'CLAVE_AB');
+    m.initial = reposo.id;
 
-    createTransition(m, espera.id, parcial.id, 'b');
-    createTransition(m, espera.id, espera.id, '!b');
-    var ok = createTransition(m, parcial.id, espera.id, '!b');
+    createTransition(m, reposo.id, claveA.id, 'a && !b');
+    createTransition(m, claveA.id, claveAB.id, 'b && !a');
+    createTransition(m, claveA.id, reposo.id, 'a && b');
+    /* clave completa: autoenlace que lleva la salida Mealy */
+    var ok = createTransition(m, claveAB.id, claveAB.id, 'a && !b');
     ok.outputs.abierto = '1';
-    createTransition(m, parcial.id, espera.id, 'b');
+    /* el bucle se fija hacia arriba: dejado a la fisica sale hacia la derecha,
+       fuera del encuadre inicial, porque el ajuste de vista solo mira los
+       circulos de los estados y no la geometria de las curvas. */
+    ok.auto = false;
+    ok.loopAngle = -90;
+    createTransition(m, claveAB.id, reposo.id, 'a && b');
     return m;
   }
 

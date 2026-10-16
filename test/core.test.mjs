@@ -348,7 +348,29 @@ test('one-hot: siempre hace falta default (quedan codigos sin usar)', () => {
 test('puerta con clave: abierto se asigna en la transicion, no en el estado', () => {
   const m = FSM.keypadLockMachine();
   const v = VERILOG.generateModule(m);
-  assert.match(v, /PARCIAL: begin\s*\n\s*if \(!b\) begin abierto = 1'b1; end/);
+  assert.match(v, /CLAVE_AB: begin\s*\n\s*if \(a && !b\) begin abierto = 1'b1; end/);
   assert.equal(m.states.filter((s) => Object.keys(s.outputs || {}).length).length, 0,
     'ningun estado tiene salidas: es Mealy puro');
+});
+
+test('puerta con clave: dos entradas, pensado para los dos botones de la placa', () => {
+  const m = FSM.keypadLockMachine();
+  assert.deepEqual(plain(m.inputs.map((p) => p.name)).sort(), ['a', 'b']);
+  assert.equal(m.outputs.length, 1);
+  assert.equal(m.states.length, 3);
+});
+
+test('puerta con clave: la salida vive en un autoenlace, para que dure mientras A siga pulsado', () => {
+  const m = FSM.keypadLockMachine();
+  const conSalida = m.transitions.filter((t) => Object.keys(t.outputs || {}).length > 0);
+  assert.equal(conSalida.length, 1, 'una sola transicion abre');
+  assert.equal(conSalida[0].from, conSalida[0].to, 'es un autoenlace: no se sale del estado');
+  assert.equal(conSalida[0].cond, 'a && !b');
+});
+
+test('puerta con clave: pulsar los dos botones cancela y vuelve al estado inicial', () => {
+  const m = FSM.keypadLockMachine();
+  const cancelan = m.transitions.filter((t) => t.cond === 'a && b');
+  assert.equal(cancelan.length, 2, 'una por cada estado avanzado');
+  cancelan.forEach((t) => assert.equal(t.to, m.initial));
 });

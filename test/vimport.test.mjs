@@ -125,3 +125,10 @@ test('el cuerpo .v (Icestudio) no se puede importar: error explicativo', () => {
 test('Verilog irreconocible: error explicativo, no una excepcion generica', () => {
   assert.throws(() => VIMPORT.parseModule('module x(); endmodule'), VIMPORT.ParseError);
 });
+
+test('puerta con clave (2 entradas, condiciones compuestas): round-trip exacto', () => {
+  const { original, reexported, reimported } = roundTrip(FSM.keypadLockMachine());
+  assert.equal(reexported, original);
+  assert.deepEqual(plain(reimported.inputs.map((p) => p.name)), ['a', 'b']);
+  assert.equal(reimported.states.length, 3);
+});
