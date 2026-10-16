@@ -140,7 +140,7 @@ main { flex: 1; display: flex; min-height: 0; }
 #panel-code.active { display: flex; flex-direction: column; overflow: hidden; }
 #panel-code .code-head { flex-shrink: 0; }
 #panel-code #code-out { flex: 1; min-height: 80px; overflow: auto; }
-#panel-code .block { flex-shrink: 0; max-height: 36%; overflow: auto; margin: 12px 0 0; }
+#panel-code .block { flex-shrink: 0; max-height: 40%; overflow: auto; margin: 0 0 12px; }
 
 .block { border: 1px solid var(--line); border-radius: 8px; padding: 10px; margin-bottom: 12px; background: var(--panel-2); }
 .block > h3 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); }
