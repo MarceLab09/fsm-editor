@@ -27,7 +27,7 @@ test('importar reconstruye nombre de modulo, reloj, reset, encoding e inputs/out
   assert.deepEqual(plain(reimported.inputs.map((p) => [p.name, p.width])), [['x', 1]]);
   assert.deepEqual(plain(reimported.outputs.map((p) => [p.name, p.width])), [['y', 1]]);
   assert.equal(reimported.states.length, 4);
-  assert.equal(reimported.transitions.length, 8);
+  assert.equal(reimported.transitions.length, 7);
   assert.equal(FSM.getState(reimported, reimported.initial).name, 'S0');
 });
 

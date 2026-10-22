@@ -458,9 +458,8 @@
     createTransition(m, s1.id, s10.id, '!x');
     createTransition(m, s1.id, s1.id, 'x');
     createTransition(m, s10.id, s101.id, 'x');
-    createTransition(m, s10.id, s0.id, '!x');
-    createTransition(m, s101.id, s10.id, '!x');
     createTransition(m, s101.id, s1.id, 'x');
+    createTransition(m, s101.id, s0.id, '!x');
     return m;
   }
 

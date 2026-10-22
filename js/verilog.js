@@ -277,9 +277,12 @@
         });
         line(indent(i0 + 2) + 'end');
       });
-      /* Aqui no hace falta `default`: cada salida ya recibio su valor por
-         defecto antes del case, asi que no hay riesgo de latch ni rama que
-         anadir. Un `default: ;` seria una linea vacia y nada mas. */
+      /* Rama por defecto explicita y vacia. Funcionalmente no hace falta,
+         porque cada salida ya recibio su valor por defecto antes del case,
+         pero deja el case cubierto de forma visible y evita los avisos de
+         "case incompleto" de las herramientas de sintesis. */
+      line(indent(i0 + 2) + 'default: begin');
+      line(indent(i0 + 2) + 'end');
       line(indent(i0 + 1) + 'endcase');
       line(indent(i0) + 'end');
       line('');

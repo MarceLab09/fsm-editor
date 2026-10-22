@@ -283,7 +283,7 @@ test('detector 101: cada estado decide con x y !x, sin else pelado', () => {
   const v = VERILOG.generateModule(FSM.demoMachine());
   assert.ok(!/else next_state/.test(v), 'no debe quedar un "else next_state"');
   assert.match(v, /S1: begin\s*\n\s*if \(!x\) next_state = S10;\s*\n\s*else if \(x\) next_state = S1;/);
-  assert.match(v, /S101: begin\s*\n\s*if \(!x\) next_state = S10;\s*\n\s*else if \(x\) next_state = S1;/);
+  assert.match(v, /S101: begin\s*\n\s*if \(x\) next_state = S1;\s*\n\s*else if \(!x\) next_state = S0;/);
 });
 
 test('transicion sin condicion: se emite el complemento de las anteriores', () => {
@@ -317,9 +317,10 @@ test('complemento de varias condiciones y de una compuesta', () => {
  * El `default` solo aparece cuando de verdad hace falta.
  * ------------------------------------------------------------------------- */
 
-test('sin default si los estados cubren todas las combinaciones del registro', () => {
+test('sin default en el proximo estado si los codigos estan todos cubiertos', () => {
   const v = VERILOG.generateModule(FSM.demoMachine());   // 4 estados en 2 bits
-  assert.ok(!/default:/.test(v), 'no deberia haber ningun default:\n' + v);
+  const proximo = v.slice(v.indexOf('// 2)'), v.indexOf('// 3)'));
+  assert.ok(!/default:/.test(proximo), 'el case de proximo estado no deberia llevar default:\n' + proximo);
 });
 
 test('con default si quedan codigos sin usar', () => {
@@ -327,10 +328,12 @@ test('con default si quedan codigos sin usar', () => {
   assert.match(v, /default: next_state = ROJO;/);
 });
 
-test('el case de salidas nunca lleva un "default: ;" vacio', () => {
+test('el case de salidas cierra con una rama por defecto explicita y vacia', () => {
   for (const build of [FSM.demoMachine, FSM.keypadLockMachine, FSM.trafficLightMachine]) {
     const v = VERILOG.generateModule(build());
-    assert.ok(!/default: ;/.test(v), build.name + ' emite un default vacio');
+    const salidas = v.slice(v.indexOf('// 3)'));
+    assert.match(salidas, /default: begin\s*\n\s*end\s*\n\s*endcase/, build.name);
+    assert.ok(!/default: ;/.test(v), build.name + ': la rama vacia se escribe con begin/end');
   }
 });
 
