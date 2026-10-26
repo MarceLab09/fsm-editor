@@ -13,11 +13,11 @@ jobs:
     name: Pruebas (core + UI)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - run: npm ci
@@ -36,7 +36,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # El editor es una app web estatica sin paso de compilacion: el mismo
       # .zip corre igual en Windows/macOS/Linux (solo hace falta un navegador),
